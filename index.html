@@ -37,7 +37,7 @@
             object-fit: cover;
         }
 
-        /* Слой для отрисовки лазера (интерактивный только в игре) */
+        /* Слой для отрисовки лазера */
         #canvas-layer {
             position: absolute;
             top: 0;
@@ -45,10 +45,10 @@
             width: 100%;
             height: 100%;
             z-index: 2;
-            pointer-events: none; /* По умолчанию выключен, включим в игре */
+            pointer-events: none; /* Выключен в меню */
         }
 
-        /* Интерфейс (всегда поверх всего) */
+        /* Интерфейс поверх всего */
         .ui-layer {
             position: absolute;
             top: 0;
@@ -56,10 +56,9 @@
             width: 100%;
             height: 100%;
             z-index: 3;
-            pointer-events: none; /* Пропускает клики сквозь пустые зоны */
+            pointer-events: none;
         }
 
-        /* Интерактивные элементы интерфейса должны принимать клики */
         .interactive {
             pointer-events: auto;
         }
@@ -72,10 +71,9 @@
             align-items: center;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            transition: opacity 0.5s ease;
         }
 
         .logo {
@@ -107,13 +105,12 @@
             border-radius: 30px;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(0, 255, 102, 0.4);
-            transition: transform 0.2s, background-color 0.2s;
+            transition: transform 0.2s;
             margin-bottom: 20px;
         }
 
         .menu-btn:active {
             transform: scale(0.95);
-            background: #00cc52;
         }
 
         /* Переключатель языков */
@@ -148,4 +145,211 @@
         }
 
         .hud-header {
-            position
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .back-btn {
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            background: rgba(0, 255, 102, 0.2);
+            color: #00ff66;
+            border: 1px solid #00ff66;
+            padding: 6px 14px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .aim-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            text-align: center;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline muted></video>
+    </div>
+
+    <canvas id="canvas-layer"></canvas>
+
+    <div class="ui-layer">
+        <div id="start-menu" class="interactive">
+            <h1 class="logo">Dam-<span>ai</span></h1>
+            <p class="tagline" id="txt-tagline">AR Помощник для бильярда</p>
+            <button class="menu-btn" id="btn-start">Запустить камеру</button>
+            
+            <div class="lang-selector">
+                <button class="lang-btn active" id="lang-ru">РУС</button>
+                <button class="lang-btn" id="lang-en">ENG</button>
+            </div>
+        </div>
+
+        <div id="game-hud">
+            <div class="hud-header">
+                <button class="back-btn interactive" id="btn-back">← Меню</button>
+                <div class="status-badge" id="txt-status">AR Активно</div>
+            </div>
+            <div class="aim-hint" id="txt-hint">Удерживайте и ведите пальцем для наведения лазера</div>
+        </div>
+    </div>
+
+    <script>
+        const languages = {
+            ru: {
+                tagline: "AR Помощник для бильярда",
+                start: "Запустить камеру",
+                status: "AR Активно",
+                hint: "Удерживайте и ведите пальцем для наведения лазера"
+            },
+            en: {
+                tagline: "AR Billiards Assistant",
+                start: "Launch Camera",
+                status: "AR Active",
+                hint: "Hold and drag your finger to aim the laser"
+            }
+        };
+
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
+        
+        const startMenu = document.getElementById('start-menu');
+        const gameHud = document.getElementById('game-hud');
+        
+        const btnStart = document.getElementById('btn-start');
+        const btnBack = document.getElementById('btn-back');
+        const langRu = document.getElementById('lang-ru');
+        const langEn = document.getElementById('lang-en');
+
+        let isAiming = false;
+        let touchX = 0;
+        let touchY = 0;
+        let laserAngle = 0;
+
+        function setLanguage(lang) {
+            document.getElementById('txt-tagline').innerText = languages[lang].tagline;
+            btnStart.innerText = languages[lang].start;
+            document.getElementById('txt-status').innerText = languages[lang].status;
+            document.getElementById('txt-hint').innerText = languages[lang].hint;
+
+            if(lang === 'ru') {
+                langRu.classList.add('active');
+                langEn.classList.remove('active');
+            } else {
+                langEn.classList.add('active');
+                langRu.classList.remove('active');
+            }
+        }
+
+        langRu.addEventListener('click', () => setLanguage('ru'));
+        langEn.addEventListener('click', () => setLanguage('en'));
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Камера недоступна:", err);
+            }
+        }
+
+        btnStart.addEventListener('click', () => {
+            initCamera();
+            startMenu.style.display = 'none';
+            gameHud.style.display = 'block';
+            canvas.style.pointerEvents = 'auto';
+            isAiming = true;
+            touchX = canvas.width / 2;
+            touchY = canvas.height / 2;
+        });
+
+        btnBack.addEventListener('click', () => {
+            startMenu.style.display = 'flex';
+            gameHud.style.display = 'none';
+            canvas.style.pointerEvents = 'none';
+            isAiming = false;
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            if(!isAiming) return;
+            touchX = e.touches[0].clientX;
+            touchY = e.touches[0].clientY;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if(!isAiming) return;
+            touchX = e.touches[0].clientX;
+            touchY = e.touches[0].clientY;
+            e.preventDefault();
+        }, { passive: false });
+
+        function drawLaser() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (isAiming) {
+                laserAngle += 0.015;
+                ctx.save();
+                ctx.translate(touchX, touchY);
+                ctx.rotate(laserAngle);
+
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#00ff66';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00ff66';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(-2000, 0);
+                ctx.lineTo(2000, 0);
+                ctx.strokeStyle = 'rgba(0, 255, 102, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00ff66';
+                ctx.stroke();
+
+                ctx.restore();
+            }
+            requestAnimationFrame(drawLaser);
+        }
+        drawLaser();
+    </script>
+</body>
+</html>
