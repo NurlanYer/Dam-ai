@@ -45,7 +45,7 @@
             width: 100%;
             height: 100%;
             z-index: 2;
-            pointer-events: none; /* Выключен в меню */
+            pointer-events: none;
         }
 
         /* Интерфейс поверх всего */
@@ -67,73 +67,136 @@
         #start-menu {
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            background: rgba(10, 15, 12, 0.85);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            padding: 40px 20px;
+        }
+
+        .header-block {
+            text-align: center;
+            margin-top: 20px;
         }
 
         .logo {
-            font-size: 3rem;
-            font-weight: 800;
+            font-size: 3.5rem;
+            font-weight: 900;
             color: #fff;
-            margin-bottom: 5px;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
             text-transform: uppercase;
         }
 
         .logo span {
             color: #00ff66;
+            text-shadow: 0 0 20px rgba(0, 255, 102, 0.6);
         }
 
         .tagline {
-            color: #aaa;
-            font-size: 1rem;
-            margin-bottom: 40px;
+            color: #888;
+            font-size: 0.95rem;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .menu-btn {
-            background: #00ff66;
-            color: #000;
-            border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            font-weight: 700;
-            border-radius: 30px;
+        /* Сетка выбора режимов (Игры) */
+        .modes-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 400px;
+            margin: 30px 0;
+        }
+
+        .mode-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 255, 102, 0.4);
-            transition: transform 0.2s;
-            margin-bottom: 20px;
+            transition: all 0.2s ease;
+            text-align: left;
         }
 
-        .menu-btn:active {
-            transform: scale(0.95);
+        /* Стили для активного режима */
+        .mode-card.active-mode {
+            border-color: #00ff66;
+            background: rgba(0, 255, 102, 0.08);
+            box-shadow: 0 4px 20px rgba(0, 255, 102, 0.15);
         }
 
-        /* Переключатель языков */
+        .mode-card.active-mode:active {
+            transform: scale(0.98);
+            background: rgba(0, 255, 102, 0.15);
+        }
+
+        /* Стили для заблокированных режимов */
+        .mode-card.locked-mode {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        .mode-info h3 {
+            color: #fff;
+            font-size: 1.15rem;
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+
+        .mode-info p {
+            color: #aaa;
+            font-size: 0.85rem;
+        }
+
+        .mode-icon {
+            font-size: 1.5rem;
+            color: #00ff66;
+        }
+
+        .mode-card.locked-mode .mode-icon {
+            color: #666;
+        }
+
+        /* Нижний блок: язык */
+        .footer-block {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
         .lang-selector {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .lang-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 8px 16px;
-            border-radius: 15px;
-            font-size: 0.9rem;
+            background: transparent;
+            color: #888;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.2s;
         }
 
         .lang-btn.active {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: #fff;
-            font-weight: bold;
+            background: #fff;
+            color: #000;
         }
 
         /* Экран игры (HUD) */
@@ -162,6 +225,8 @@
             border-radius: 20px;
             font-size: 0.9rem;
             cursor: pointer;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
         }
 
         .status-badge {
@@ -198,15 +263,49 @@
     <canvas id="canvas-layer"></canvas>
 
     <div class="ui-layer">
+        
         <div id="start-menu" class="interactive">
-            <h1 class="logo">Dam-<span>ai</span></h1>
-            <p class="tagline" id="txt-tagline">AR Помощник для бильярда</p>
-            <button class="menu-btn" id="btn-start">Запустить камеру</button>
             
-            <div class="lang-selector">
-                <button class="lang-btn active" id="lang-ru">РУС</button>
-                <button class="lang-btn" id="lang-en">ENG</button>
+            <div class="header-block">
+                <h1 class="logo">Dam-<span>ai</span></h1>
+                <p class="tagline" id="txt-tagline">AR Помощник для бильярда</p>
             </div>
+
+            <div class="modes-grid">
+                
+                <div class="mode-card active-mode" id="btn-start-training">
+                    <div class="mode-info">
+                        <h3 id="title-m1">Свободная тренировка</h3>
+                        <p id="desc-m1">Умный лазерный прицел для любых ударов</p>
+                    </div>
+                    <div class="mode-icon">🎯</div>
+                </div>
+
+                <div class="mode-card locked-mode">
+                    <div class="mode-info">
+                        <h3 id="title-m2">Игра: Карамболь (Тройка)</h3>
+                        <p id="desc-m2">Отрисовка траекторий от трех бортов</p>
+                    </div>
+                    <div class="mode-icon">🔒</div>
+                </div>
+
+                <div class="mode-card locked-mode">
+                    <div class="mode-info">
+                        <h3 id="title-m3">Упражнения на резку</h3>
+                        <p id="desc-m3">Интерактивные подсказки углов прицеливания</p>
+                    </div>
+                    <div class="mode-icon">🔒</div>
+                </div>
+
+            </div>
+            
+            <div class="footer-block">
+                <div class="lang-selector">
+                    <button class="lang-btn active" id="lang-ru">РУС</button>
+                    <button class="lang-btn" id="lang-en">ENG</button>
+                </div>
+            </div>
+
         </div>
 
         <div id="game-hud">
@@ -216,19 +315,31 @@
             </div>
             <div class="aim-hint" id="txt-hint">Удерживайте и ведите пальцем для наведения лазера</div>
         </div>
+
     </div>
 
     <script>
+        // Локализация текстов меню и игр
         const languages = {
             ru: {
                 tagline: "AR Помощник для бильярда",
-                start: "Запустить камеру",
+                m1_title: "Свободная тренировка",
+                m1_desc: "Умный лазерный прицел для любых ударов",
+                m2_title: "Игра: Карамболь (Тройка)",
+                m2_desc: "Отрисовка траекторий от трех бортов",
+                m3_title: "Упражнения на резку",
+                m3_desc: "Интерактивные подсказки углов прицеливания",
                 status: "AR Активно",
                 hint: "Удерживайте и ведите пальцем для наведения лазера"
             },
             en: {
                 tagline: "AR Billiards Assistant",
-                start: "Launch Camera",
+                m1_title: "Free Training",
+                m1_desc: "Smart laser aim for any types of shots",
+                m2_title: "Game: Carom (3-Cushion)",
+                m2_desc: "Predicting trajectories from three cushions",
+                m3_title: "Cut Shot Drills",
+                m3_desc: "Interactive aiming angle guides",
                 status: "AR Active",
                 hint: "Hold and drag your finger to aim the laser"
             }
@@ -241,7 +352,7 @@
         const startMenu = document.getElementById('start-menu');
         const gameHud = document.getElementById('game-hud');
         
-        const btnStart = document.getElementById('btn-start');
+        const btnStartTraining = document.getElementById('btn-start-training');
         const btnBack = document.getElementById('btn-back');
         const langRu = document.getElementById('lang-ru');
         const langEn = document.getElementById('lang-en');
@@ -251,9 +362,16 @@
         let touchY = 0;
         let laserAngle = 0;
 
+        // Функция смены языка
         function setLanguage(lang) {
             document.getElementById('txt-tagline').innerText = languages[lang].tagline;
-            btnStart.innerText = languages[lang].start;
+            document.getElementById('title-m1').innerText = languages[lang].m1_title;
+            document.getElementById('desc-m1').innerText = languages[lang].m1_desc;
+            document.getElementById('title-m2').innerText = languages[lang].m2_title;
+            document.getElementById('desc-m2').innerText = languages[lang].m2_desc;
+            document.getElementById('title-m3').innerText = languages[lang].m3_title;
+            document.getElementById('desc-m3').innerText = languages[lang].m3_desc;
+            
             document.getElementById('txt-status').innerText = languages[lang].status;
             document.getElementById('txt-hint').innerText = languages[lang].hint;
 
@@ -269,6 +387,7 @@
         langRu.addEventListener('click', () => setLanguage('ru'));
         langEn.addEventListener('click', () => setLanguage('en'));
 
+        // Подгонка холста
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -276,6 +395,7 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
+        // Камера
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
@@ -288,7 +408,8 @@
             }
         }
 
-        btnStart.addEventListener('click', () => {
+        // Клик по карточке "Свободная тренировка" запускает игру
+        btnStartTraining.addEventListener('click', () => {
             initCamera();
             startMenu.style.display = 'none';
             gameHud.style.display = 'block';
@@ -298,6 +419,7 @@
             touchY = canvas.height / 2;
         });
 
+        // Назад в меню
         btnBack.addEventListener('click', () => {
             startMenu.style.display = 'flex';
             gameHud.style.display = 'none';
@@ -308,6 +430,7 @@
             }
         });
 
+        // Тач-события
         canvas.addEventListener('touchstart', (e) => {
             if(!isAiming) return;
             touchX = e.touches[0].clientX;
@@ -321,6 +444,7 @@
             e.preventDefault();
         }, { passive: false });
 
+        // Отрисовка
         function drawLaser() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (isAiming) {
