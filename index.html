@@ -1,28 +1,10 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Game Assistant</title>
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
-        .aim-line {
-            position: absolute; top: 50%; left: 10%; width: 80%; height: 4px;
-            background: rgba(0, 255, 0, 0.8); box-shadow: 0 0 15px #0f0; z-index: 2;
-        }
-    </style>
-</head>
-<body>
-
-    <video id="camera" autoplay playsinline></video>
-    <div class="aim-line"></div>
-
-    <script>
-        const video = document.getElementById('camera');
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { alert("Камера недоступна. Пожалуйста, откройте сайт через браузер Chrome и разрешите доступ."); });
+currentAngle += deltaX * 0.4;
+                currentAngle = (currentAngle % 360 + 360) % 360;
+                laser.style.transform = translate(0, -50%) rotate(${currentAngle}deg);
+                angleDisplay.textContent = Math.round(currentAngle);
+                startX = touchX;
+            }
+        });
     </script>
 </body>
 </html>
