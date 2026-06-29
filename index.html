@@ -169,7 +169,7 @@
             font-size: 1.4rem;
         }
 
-        /* Выпадающий список/селектор языков (Будущее масштабирование) */
+        /* Селектор языков */
         .footer-block {
             width: 100%;
             display: flex;
@@ -264,7 +264,6 @@
 
     <div class="ui-layer">
         
-        <!-- Главное Меню -->
         <div id="start-menu" class="interactive">
             
             <div class="header-block">
@@ -272,7 +271,6 @@
                 <p class="tagline" id="txt-tagline">Платформа дополненной реальности</p>
             </div>
 
-            <!-- Сюда скрипт динамически рендерит группы игр -->
             <div class="menu-content" id="menu-games-content"></div>
             
             <div class="footer-block">
@@ -289,7 +287,6 @@
 
         </div>
 
-        <!-- Универсальный Игровой HUD -->
         <div id="game-hud">
             <div class="hud-header">
                 <button class="back-btn interactive" id="btn-back">← Меню</button>
@@ -302,7 +299,7 @@
 
     <script>
         // ==========================================
-        // 1. БАЗА ДАННЫХ ЛОКАЛИЗАЦИИ (ЛЕГКО РАСШИРЯТЬ)
+        // 1. БАЗА ДАННЫХ ЛОКАЛИЗАЦИИ
         // ==========================================
         const localization = {
             ru: {
@@ -311,7 +308,7 @@
                 cat_billiards: "Бильярдная группа",
                 cat_board: "Настольные игры",
                 cat_cards: "Карточные игры",
-                hint_billiards: "Удерживайте и ведите пальцем для наведения лазера",
+                hint_billiards: "Тапните на биток и тяните в сторону для прицеливания",
                 hint_locked: "Этот игровой модуль находится в разработке"
             },
             en: {
@@ -320,7 +317,7 @@
                 cat_billiards: "Billiards Group",
                 cat_board: "Board Games",
                 cat_cards: "Card Games",
-                hint_billiards: "Hold and drag your finger to aim the laser",
+                hint_billiards: "Tap on the cue ball and drag to aim",
                 hint_locked: "This game module is under development"
             },
             es: {
@@ -329,21 +326,20 @@
                 cat_billiards: "Grupo de Billar",
                 cat_board: "Juegos de Mesa",
                 cat_cards: "Juegos de Cartas",
-                hint_billiards: "Mantén presionado и arrastra para apuntar",
+                hint_billiards: "Toca la bola blanca y arrastra para apuntar",
                 hint_locked: "Este módulo está en desarrollo"
             },
             zh: {
                 tagline: "增强现实游戏平台",
-                status: "AR 已 Активирован",
+                status: "AR 已 激活",
                 cat_billiards: "台球系列",
                 cat_board: "棋类游戏",
                 cat_cards: "棋牌纸牌",
-                hint_billiards: "按住 family 并拖动手指来瞄准激光",
+                hint_billiards: "点击母球并拖动手指进行瞄准",
                 hint_locked: "该游戏模块正在开发中"
             }
         };
 
-        // Тексты для конкретных игр (привязаны к ID)
         const gameTitles = {
             ru: {
                 billiards_free: { title: "Свободная тренировка", desc: "Умный лазерный прицел" },
@@ -368,16 +364,13 @@
             },
             zh: {
                 billiards_free: { title: "自由训练", desc: "智能激光瞄准辅助" },
-                billiards_carom: { title: "三边开伦", desc: "三边 Rebound 轨迹预测" },
+                billiards_carom: { title: "三边开伦", desc: "三边弹性轨迹预测" },
                 chess: { title: "AR 国际象棋", desc: "棋盘分析与最佳走法提示" },
                 checkers: { title: "国际跳棋", desc: "计算吃子组合" },
-                poker: { title: "德州扑克", desc: "实时胜率胜算计算器" }
+                poker: { title: "德州扑к", desc: "实时胜率计算器" }
             }
         };
 
-        // ==========================================
-        // 2. СТРУКТУРА ИГР (СКЕЛЕТ ДЛЯ ОПЕРАТИВНОГО ДОПИСЫВАНИЯ)
-        // ==========================================
         const gameStructure = [
             {
                 categoryKey: "cat_billiards",
@@ -404,7 +397,6 @@
         let currentLang = 'ru';
         let currentActiveGame = null;
 
-        // Элементы
         const menuContainer = document.getElementById('menu-games-content');
         const langUpdater = document.getElementById('lang-updater');
         const startMenu = document.getElementById('start-menu');
@@ -414,10 +406,8 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
 
-        // Отрисовка меню на основе структуры данных
         function renderMenu() {
             menuContainer.innerHTML = '';
-            
             gameStructure.forEach(cat => {
                 const section = document.createElement('div');
                 section.className = 'category-section';
@@ -447,52 +437,37 @@
                     }
                     list.appendChild(card);
                 });
-                
                 section.appendChild(list);
                 menuContainer.appendChild(section);
             });
-
             document.getElementById('txt-tagline').innerText = localization[currentLang].tagline;
         }
 
-        // Выбор языка
         langUpdater.addEventListener('change', (e) => {
             currentLang = e.target.value;
             renderMenu();
         });
 
-        // ==========================================
-        // 3. ТОЧКА СБОРКИ: ИЗОЛИРОВАННЫЕ МОДУЛИ ИГР
-        // ==========================================
         function launchGameModule(gameId) {
             currentActiveGame = gameId;
             initCamera();
-            
             startMenu.style.display = 'none';
             gameHud.style.display = 'block';
-            
-            // Настройка текстов HUD
             document.getElementById('txt-status').innerText = localization[currentLang].status;
             
-            // Настройка под конкретную игру
             if (gameId === 'billiards_free') {
                 document.getElementById('txt-hint').innerText = localization[currentLang].hint_billiards;
                 canvas.style.pointerEvents = 'auto';
                 initBilliardsFreeLogic();
             }
-            // Сюда в будущем просто дописываем: 
-            // else if (gameId === 'chess') { initChessLogic(); }
         }
 
         function closeActiveModule() {
-            // Сброс логики бильярда
             isBilliardsAiming = false;
-            
             currentActiveGame = null;
             startMenu.style.display = 'flex';
             gameHud.style.display = 'none';
             canvas.style.pointerEvents = 'none';
-            
             if (video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
             }
@@ -501,67 +476,115 @@
         btnBack.addEventListener('click', closeActiveModule);
 
         // ==========================================
-        // 4. КОД ДЛЯ КОНКРЕТНОЙ ИГРЫ: "СВОБОДНАЯ ТРЕНИРОВКА"
+        // 4. КОД ДЛЯ КОНКРЕТНОЙ ИГРЫ: "СВОБОДНАЯ ТРЕНИРОВКА" (ИНТЕРАКТИВ)
         // ==========================================
         let isBilliardsAiming = false;
-        let touchX = 0, touchY = 0, laserAngle = 0;
+        
+        // Координаты центрального шара (битка)
+        let ballX = 0;
+        let ballY = 0;
+        
+        // Текущие координаты пальца (куда целимся)
+        let aimX = 0;
+        let aimY = 0;
+        
+        // Флаг того, что палец сейчас касается экрана
+        let isTouching = false; 
 
         function initBilliardsFreeLogic() {
             isBilliardsAiming = true;
-            touchX = canvas.width / 2;
-            touchY = canvas.height / 2;
+            // По умолчанию ставим виртуальный биток ровно по центру экрана
+            ballX = canvas.width / 2;
+            ballY = canvas.height / 2;
+            aimX = ballX;
+            aimY = ballY - 100; // Направлен изначально вверх
+            isTouching = false;
         }
 
         canvas.addEventListener('touchstart', (e) => {
             if(!isBilliardsAiming) return;
-            touchX = e.touches[0].clientX;
-            touchY = e.touches[0].clientY;
+            const touch = e.touches[0];
+            
+            // Фиксируем биток в точке первого тапа
+            ballX = touch.clientX;
+            ballY = touch.clientY;
+            
+            // Точка прицела изначально там же
+            aimX = touch.clientX;
+            aimY = touch.clientY;
+            
+            isTouching = true;
         });
 
         canvas.addEventListener('touchmove', (e) => {
-            if(!isBilliardsAiming) return;
-            touchX = e.touches[0].clientX;
-            touchY = e.touches[0].clientY;
+            if(!isBilliardsAiming || !isTouching) return;
+            const touch = e.touches[0];
+            
+            // Обновляем только координату прицеливания при движении пальца
+            aimX = touch.clientX;
+            aimY = touch.clientY;
+            
             e.preventDefault();
         }, { passive: false });
 
-        // Общий игровой цикл отрисовки графики
+        canvas.addEventListener('touchend', () => {
+            // Когда отпустили палец, лазер застывает в текущем направлении
+            isTouching = false;
+        });
+
+        // Общий игровой цикл отрисовки
         function globalRenderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Если запущен модуль свободной тренировки — рисуем его графику
             if (currentActiveGame === 'billiards_free' && isBilliardsAiming) {
-                laserAngle += 0.015;
-                ctx.save();
-                ctx.translate(touchX, touchY);
-                ctx.rotate(laserAngle);
+                
+                // Вычисляем угол между битком (ballX, ballY) и пальцем (aimX, aimY)
+                let angle = Math.atan2(aimY - ballY, aimX - ballX);
 
+                ctx.save();
+                ctx.translate(ballX, ballY);
+                ctx.rotate(angle);
+
+                // 1. Отрисовка виртуального битка (белый шар)
                 ctx.beginPath();
-                ctx.arc(0, 0, 8, 0, Math.PI * 2);
-                ctx.fillStyle = '#00ff66';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#00ff66';
+                ctx.arc(0, 0, 16, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffffff';
                 ctx.fill();
 
+                // Внутренний зеленый контур для стиля AR
                 ctx.beginPath();
-                ctx.moveTo(-2000, 0);
-                ctx.lineTo(2000, 0);
-                ctx.strokeStyle = 'rgba(0, 255, 102, 0.8)';
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 10;
+                ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                ctx.strokeStyle = '#00ff66';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 2. Отрисовка линии лазерного прицела вперед
+                ctx.beginPath();
+                ctx.moveTo(16, 0); // Начинаем от края шара
+                ctx.lineTo(2000, 0); // Уходит вперед за горизонт
+                ctx.strokeStyle = isTouching ? 'rgba(0, 255, 102, 0.9)' : 'rgba(0, 255, 102, 0.4)';
+                ctx.lineWidth = isTouching ? 4 : 2; // Толще, когда ведем пальцем
+                ctx.shadowBlur = isTouching ? 15 : 5;
                 ctx.shadowColor = '#00ff66';
+                ctx.stroke();
+
+                // 3. Отрисовка линии кия назад (опционально, для наглядности вектора)
+                ctx.beginPath();
+                ctx.moveTo(-16, 0);
+                ctx.lineTo(-120, 0);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]); // Пунктирная линия кия
                 ctx.stroke();
 
                 ctx.restore();
             }
-            
-            // Сюда можно дописывать рендер графики для шахмат, покера и т.д.
-            // if (currentActiveGame === 'chess') { drawChessGrid(); }
 
             requestAnimationFrame(globalRenderLoop);
         }
 
-        // Системные функции (Камера, Ресайз)
         function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resizeCanvas);
         
@@ -572,7 +595,6 @@
             } catch (err) { console.error("Камера недоступна:", err); }
         }
 
-        // Старт системы
         resizeCanvas();
         renderMenu();
         globalRenderLoop();
