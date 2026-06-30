@@ -1,1 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dam-ai — Шахматы AR</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: #0d0f12; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+        .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+        .header { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; }
+        .btn { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; text-decoration: none; }
+        .btn-calib { border-color: rgba(0, 255, 102, 0.4); color: #00ff66; font-weight: 600; }
+        .btn-calib.active-mode { background: #00ff66; color: #000; border-color: #00ff66; }
+        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; text-align: center; white-space: nowrap; }
+    </style>
+</head>
+<body>
 
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline muted></video>
+    </div>
+    <canvas id="canvas-layer"></canvas>
+
+    <div class="hud">
+        <div class="header">
+            <a href="./" class="btn interactive">← Меню</a>
+            <button class="btn btn-calib interactive" id="btn-calibrate">📐 <span id="txt-calib">Разметка доски</span></button>
+        </div>
+        <div class="hint" id="txt-hint">Режим распознавания позиций. Настройте разметку доски.</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('webcam');
+        
+        let isCalibratingMode = false;
+        let draggedCorner = null;
+
+        // Начальные углы шахматной доски
+        let boardCorners = [
+            { x: window.innerWidth * 0.2, y: window.innerHeight * 0.3 },
+            { x: window.innerWidth * 0.8, y: window.innerWidth * 0.2 ? window.innerHeight * 0.3 : window.innerHeight * 0.3 },
+            { x: window.innerWidth * 0.8, y: window.innerHeight * 0.7 },
+            { x: window.innerWidth * 0.2, y: window.innerHeight * 0.7 }
+        ];
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+                video.srcObject = stream;
+            } catch (err) {
+                console.log("Камера недоступна. Работаем в режиме симуляции.");
+            }
+        }
+
+        const btnCalibrate = document.getElementById('btn-calibrate');
+        btnCalibrate.addEventListener('click', () => {
+            isCalibratingMode = !isCalibratingMode;
+            if (isCalibratingMode) {
+                btnCalibrate.classList.add('active-mode');
+                document.getElementById('txt-calib').innerText = "Сохранить доску";
+            } else {
+                btnCalibrate.classList.remove('active-mode');
+                document.getElementById('txt-calib').innerText = "Разметка доски";
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            if (isCalibratingMode) {
+                draggedCorner = null;
+                for (let i = 0; i < boardCorners.length; i++) {
+                    if (Math.hypot(boardCorners[i].x - touch.clientX, boardCorners[i].y - touch.clientY) < 45) {
+                        draggedCorner = i;
+                        break;
+                    }
+                }
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            if (isCalibratingMode && draggedCorner !== null) {
+                boardCorners[draggedCorner].x = touch.clientX;
+                boardCorners[draggedCorner].y = touch.clientY;
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', () => { draggedCorner = null; });
+
+        // Функция интерполяции для построения сетки 8х8 между 4 точками
+        function getPointOnMesh(u, v) {
+            const topX = boardCorners[0].x + u * (boardCorners[1].x - boardCorners[0].x);
+            const topY = boardCorners[0].y + u * (boardCorners[1].y - boardCorners[0].y);
+            const bottomX = boardCorners[3].x + u * (boardCorners[2].x - boardCorners[3].x);
+            const bottomY = boardCorners[3].y + u * (boardCorners[2].y - boardCorners[3].y);
+            
+            return {
+                x: topX + v * (bottomX - topX),
+                y: topY + v * (bottomY - topY)
+            };
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Рисуем сетку шахматного поля 8х8
+            for (let i = 0; i <= 8; i++) {
+                let pStartH = getPointOnMesh(0, i / 8);
+                let pEndH = getPointOnMesh(1, i / 8);
+                ctx.beginPath(); ctx.moveTo(pStartH.x, pStartH.y); ctx.lineTo(pEndH.x, pEndH.y);
+                ctx.strokeStyle = isCalibratingMode ? 'rgba(0, 255, 102, 0.5)' : 'rgba(0, 255, 102, 0.25)';
+                ctx.lineWidth = 1; ctx.stroke();
+
+                let pStartV = getPointOnMesh(i / 8, 0);
+                let pEndV = getPointOnMesh(i / 8, 1);
+                ctx.beginPath(); ctx.moveTo(pStartV.x, pStartV.y); ctx.lineTo(pEndV.x, pEndV.y);
+                ctx.stroke();
+            }
+
+            // Внешняя рамка
+            ctx.beginPath();
+            boardCorners.forEach((c, i) => i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y));
+            ctx.closePath();
+            ctx.strokeStyle = '#00ff66';
+            ctx.lineWidth = isCalibratingMode ? 3 : 1.5;
+            ctx.stroke();
+
+            // Точки для перетаскивания в режиме разметки
+            if (isCalibratingMode) {
+                boardCorners.forEach((c, i) => {
+                    ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI*2);
+                    ctx.fillStyle = i === draggedCorner ? '#fff' : 'rgba(0,255,102,0.8)';
+                    ctx.fill(); ctx.stroke();
+                });
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resize);
+        resize();
+        initCamera();
+        draw();
+    </script>
+</body>
+</html>
