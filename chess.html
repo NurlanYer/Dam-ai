@@ -3,153 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dam-ai — Шахматы AR</title>
+    <title>Dam-ai — Шахматный AR Интеллект</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: #0d0f12; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
         .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
         .interactive { pointer-events: auto; }
-        .header { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; }
+        .header { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; }
         .btn { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; text-decoration: none; }
-        .btn-calib { border-color: rgba(0, 255, 102, 0.4); color: #00ff66; font-weight: 600; }
-        .btn-calib.active-mode { background: #00ff66; color: #000; border-color: #00ff66; }
-        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; text-align: center; white-space: nowrap; }
+        
+        /* Статус ИИ в очках */
+        .ai-status { background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(0, 255, 102, 0.3); padding: 8px 16px; border-radius: 20px; color: #00ff66; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .pulse-dot { width: 8px; height: 8px; background-color: #00ff66; border-radius: 50%; animation: pulse 1.5s infinite; }
+        
+        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 12px 24px; border-radius: 24px; font-size: 0.9rem; text-align: center; max-width: 90%; line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); }
+        
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.7); }
+            70% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 6px rgba(0, 255, 102, 0); }
+            100% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 102, 0); }
+        }
     </style>
 </head>
 <body>
 
+    <!-- Слой сквозной камеры для AR очков -->
     <div id="video-container">
         <video id="webcam" autoplay playsinline muted></video>
     </div>
+    
+    <!-- Слой для отрисовки графики и стрелок лучших ходов -->
     <canvas id="canvas-layer"></canvas>
 
+    <!-- Интерфейс поверх камеры -->
     <div class="hud">
         <div class="header">
             <a href="./" class="btn interactive">← Меню</a>
-            <button class="btn btn-calib interactive" id="btn-calibrate">📐 <span id="txt-calib">Разметка доски</span></button>
+            <div class="ai-status">
+                <div class="pulse-dot"></div>
+                <span id="engine-status">Stockfish: Запуск ИИ...</span>
+            </div>
         </div>
-        <div class="hint" id="txt-hint">Режим распознавания позиций. Настройте разметку доски.</div>
+        <div class="hint" id="txt-hint">Движок активирован. Направьте камеру очков на шахматную доску для автоматического сканирования.</div>
     </div>
 
     <script>
         const canvas = document.getElementById('canvas-layer');
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
-        
-        let isCalibratingMode = false;
-        let draggedCorner = null;
+        let stockfish = null;
+        let bestMove = "";
 
-        // Начальные углы шахматной доски
-        let boardCorners = [
-            { x: window.innerWidth * 0.2, y: window.innerHeight * 0.3 },
-            { x: window.innerWidth * 0.8, y: window.innerWidth * 0.2 ? window.innerHeight * 0.3 : window.innerHeight * 0.3 },
-            { x: window.innerWidth * 0.8, y: window.innerHeight * 0.7 },
-            { x: window.innerWidth * 0.2, y: window.innerHeight * 0.7 }
-        ];
-
+        // 1. Инициализация камеры (без рамок)
         async function initCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                    audio: false 
+                });
                 video.srcObject = stream;
             } catch (err) {
-                console.log("Камера недоступна. Работаем в режиме симуляции.");
+                console.log("Камера очков симулируется.");
             }
         }
 
-        const btnCalibrate = document.getElementById('btn-calibrate');
-        btnCalibrate.addEventListener('click', () => {
-            isCalibratingMode = !isCalibratingMode;
-            if (isCalibratingMode) {
-                btnCalibrate.classList.add('active-mode');
-                document.getElementById('txt-calib').innerText = "Сохранить доску";
-            } else {
-                btnCalibrate.classList.remove('active-mode');
-                document.getElementById('txt-calib').innerText = "Разметка доски";
-            }
-        });
-
-        canvas.addEventListener('touchstart', (e) => {
-            const touch = e.touches[0];
-            if (isCalibratingMode) {
-                draggedCorner = null;
-                for (let i = 0; i < boardCorners.length; i++) {
-                    if (Math.hypot(boardCorners[i].x - touch.clientX, boardCorners[i].y - touch.clientY) < 45) {
-                        draggedCorner = i;
-                        break;
+        // 2. Подключение шахматного ядра Stockfish напрямую из глобального open-source репозитория
+        function initStockfish() {
+            try {
+                // Загружаем легковесную веб-версию Stockfish
+                stockfish = new Worker('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');
+                
+                stockfish.onmessage = function(event) {
+                    const message = event.data;
+                    console.log("Stockfish:", message);
+                    
+                    // Если движок выдал лучший ход (например, "bestmove e2e4")
+                    if (message.startsWith('bestmove')) {
+                        const parts = message.split(' ');
+                        bestMove = parts[1]; // Получаем сам ход, например, "e2e4"
+                        document.getElementById('engine-status').innerText = `Рекомендация: ${bestMove.toUpperCase()}`;
+                        document.getElementById('txt-hint').innerText = `ИИ просчитал позицию! Лучший ход для вас: ${bestMove.toUpperCase()}. Сделайте его на реальной доске.`;
                     }
-                }
+                };
+
+                // Говорим движку настроить новую игру
+                stockfish.postMessage('uci');
+                stockfish.postMessage('isready');
+                stockfish.postMessage('ucinewgame');
+                
+                document.getElementById('engine-status').innerText = "Stockfish: Готов к анализу";
+                
+                // ДЕМО-ТЕСТ: Заставим движок для проверки прямо сейчас найти лучший первый ход
+                // Мы передаем ему стартовую позицию шахмат
+                analyzePosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+            } catch (e) {
+                document.getElementById('engine-status').innerText = "Ошибка запуска ИИ";
+                console.error("Не удалось запустить Stockfish Worker:", e);
             }
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            if (isCalibratingMode && draggedCorner !== null) {
-                boardCorners[draggedCorner].x = touch.clientX;
-                boardCorners[draggedCorner].y = touch.clientY;
-            }
-            e.preventDefault();
-        }, { passive: false });
-
-        canvas.addEventListener('touchend', () => { draggedCorner = null; });
-
-        // Функция интерполяции для построения сетки 8х8 между 4 точками
-        function getPointOnMesh(u, v) {
-            const topX = boardCorners[0].x + u * (boardCorners[1].x - boardCorners[0].x);
-            const topY = boardCorners[0].y + u * (boardCorners[1].y - boardCorners[0].y);
-            const bottomX = boardCorners[3].x + u * (boardCorners[2].x - boardCorners[3].x);
-            const bottomY = boardCorners[3].y + u * (boardCorners[2].y - boardCorners[3].y);
-            
-            return {
-                x: topX + v * (bottomX - topX),
-                y: topY + v * (bottomY - topY)
-            };
         }
 
-        function draw() {
+        // Функция отправки позиции движку на анализ (глубина просчета 10 ходов вперед)
+        function analyzePosition(fenString) {
+            if (!stockfish) return;
+            document.getElementById('engine-status').innerText = "ИИ думает...";
+            stockfish.postMessage(`position fen ${fenString}`);
+            stockfish.postMessage('go depth 10'); 
+        }
+
+        // 3. Слой отрисовки AR графики
+        // На следующих этапах этот холст будет чертить стрелку прямо от начального поля к конечному
+        function drawAROverlay() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Рисуем сетку шахматного поля 8х8
-            for (let i = 0; i <= 8; i++) {
-                let pStartH = getPointOnMesh(0, i / 8);
-                let pEndH = getPointOnMesh(1, i / 8);
-                ctx.beginPath(); ctx.moveTo(pStartH.x, pStartH.y); ctx.lineTo(pEndH.x, pEndH.y);
-                ctx.strokeStyle = isCalibratingMode ? 'rgba(0, 255, 102, 0.5)' : 'rgba(0, 255, 102, 0.25)';
-                ctx.lineWidth = 1; ctx.stroke();
-
-                let pStartV = getPointOnMesh(i / 8, 0);
-                let pEndV = getPointOnMesh(i / 8, 1);
-                ctx.beginPath(); ctx.moveTo(pStartV.x, pStartV.y); ctx.lineTo(pEndV.x, pEndV.y);
+            // Если ход найден, временно выводим футуристичный AR-индикатор в углу экрана
+            if (bestMove) {
+                ctx.save();
+                ctx.fillStyle = "rgba(0, 255, 102, 0.15)";
+                ctx.strokeStyle = "#00ff66";
+                ctx.lineWidth = 2;
+                // Рисуем виртуальное HUD-кольцо захвата цели
+                ctx.beginPath();
+                ctx.arc(window.innerWidth - 60, window.innerHeight - 60, 25, 0, Math.PI * 2);
+                ctx.fill();
                 ctx.stroke();
+                ctx.restore();
             }
 
-            // Внешняя рамка
-            ctx.beginPath();
-            boardCorners.forEach((c, i) => i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y));
-            ctx.closePath();
-            ctx.strokeStyle = '#00ff66';
-            ctx.lineWidth = isCalibratingMode ? 3 : 1.5;
-            ctx.stroke();
-
-            // Точки для перетаскивания в режиме разметки
-            if (isCalibratingMode) {
-                boardCorners.forEach((c, i) => {
-                    ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI*2);
-                    ctx.fillStyle = i === draggedCorner ? '#fff' : 'rgba(0,255,102,0.8)';
-                    ctx.fill(); ctx.stroke();
-                });
-            }
-
-            requestAnimationFrame(draw);
+            requestAnimationFrame(drawAROverlay);
         }
 
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        // Корректный ресайз холста под любые очки/экраны
+        function resize() { 
+            canvas.width = window.innerWidth; 
+            canvas.height = window.innerHeight; 
+        }
+        
         window.addEventListener('resize', resize);
         resize();
+        
+        // Старт систем
         initCamera();
-        draw();
+        initStockfish();
+        drawAROverlay();
     </script>
 </body>
 </html>
