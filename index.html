@@ -181,27 +181,27 @@
     <div id="start-menu">
         <div class="header-block">
             <h1 class="logo">Dam-<span>ai</span></h1>
-            <p class="tagline">Платформа дополненной реальности</p>
+            <p class="tagline" id="loc-tagline">Платформа дополненной реальности</p>
         </div>
 
         <div class="menu-content">
             
             <!-- КАТЕГОРИЯ: БИЛЬЯРД -->
             <div class="category-section">
-                <h2>Бильярдная группа</h2>
+                <h2 id="loc-cat-billiards">Бильярдная группа</h2>
                 <div class="games-list">
                     <a href="billiards.html" class="game-card available">
                         <div class="game-info">
-                            <h3>Свободная тренировка</h3>
-                            <p>Умный лазерный прицел</p>
+                            <h3 id="loc-game-free-train">Свободная тренировка</h3>
+                            <p id="loc-desc-free-train">Умный лазерный прицел</p>
                         </div>
                         <div class="game-icon">🎯</div>
                     </a>
                     
                     <div class="game-card locked">
                         <div class="game-info">
-                            <h3>Карамболь (Тройка)</h3>
-                            <p>Траектории от 3 бортов</p>
+                            <h3 id="loc-game-carom">Карамболь (Тройка)</h3>
+                            <p id="loc-desc-carom">Траектории от 3 бортов</p>
                         </div>
                         <div class="game-icon">🎱</div>
                     </div>
@@ -210,21 +210,20 @@
 
             <!-- КАТЕГОРИЯ: НАСТОЛЬНЫЕ ИГРЫ -->
             <div class="category-section">
-                <h2>Настольные игры</h2>
+                <h2 id="loc-cat-tabletop">Настольные игры</h2>
                 <div class="games-list">
-                    <!-- СДЕЛАЛИ КНОПКУ ШАХМАТ АКТИВНОЙ И ПОДКЛЮЧИЛИ ССЫЛКУ -->
                     <a href="chess.html" class="game-card available">
                         <div class="game-info">
-                            <h3>Шахматы AR</h3>
-                            <p>Анализ позиций и подсказки</p>
+                            <h3 id="loc-game-chess">Шахматы AR</h3>
+                            <p id="loc-desc-chess">Анализ позиций и подсказки</p>
                         </div>
                         <div class="game-icon">👑</div>
                     </a>
                     
                     <div class="game-card locked">
                         <div class="game-info">
-                            <h3>Шашки / Нарды</h3>
-                            <p>Интерактивная разметка</p>
+                            <h3 id="loc-game-checkers">Шашки / Нарды</h3>
+                            <p id="loc-desc-checkers">Интерактивная разметка</p>
                         </div>
                         <div class="game-icon">🎲</div>
                     </div>
@@ -233,12 +232,12 @@
 
             <!-- КАТЕГОРИЯ: КАРТЫ -->
             <div class="category-section">
-                <h2>Карточные игры</h2>
+                <h2 id="loc-cat-cards">Карточные игры</h2>
                 <div class="games-list">
                     <div class="game-card locked">
                         <div class="game-info">
-                            <h3>Покерный ассистент</h3>
-                            <p>Подсчет аутов и вероятностей</p>
+                            <h3 id="loc-game-poker">Покерный ассистент</h3>
+                            <p id="loc-desc-poker">Подсчет аутов и вероятностей</p>
                         </div>
                         <div class="game-icon">🃏</div>
                     </div>
@@ -247,11 +246,10 @@
 
         </div>
         
-        <!-- Блок подвала с расширенным выбором языков -->
         <div class="footer-block">
             <div class="lang-dropdown-container">
                 <span>🌐</span>
-                <select class="lang-select">
+                <select class="lang-select" id="lang-selector">
                     <option value="ru">Русский (RU)</option>
                     <option value="en">English (EN)</option>
                     <option value="zh">简体中文 (ZH)</option>
@@ -261,5 +259,101 @@
         </div>
     </div>
 
+    <script>
+        // База переводов для главной страницы
+        const translations = {
+            ru: {
+                tagline: "Платформа дополненной реальности",
+                catBilliards: "Бильярдная группа",
+                gameFreeTrain: "Свободная тренировка",
+                descFreeTrain: "Умный лазерный прицел",
+                gameCarom: "Карамболь (Тройка)",
+                descCarom: "Траектории от 3 бортов",
+                catTabletop: "Настольные игры",
+                gameChess: "Шахматы AR",
+                descChess: "Анализ позиций и подсказки",
+                gameCheckers: "Шашки / Нарды",
+                descCheckers: "Интерактивная разметка",
+                catCards: "Карточные игры",
+                gamePoker: "Покерный ассистент",
+                descPoker: "Подсчет аутов и вероятностей"
+            },
+            en: {
+                tagline: "Augmented Reality Platform",
+                catBilliards: "Billiard Group",
+                gameFreeTrain: "Free Training",
+                descFreeTrain: "Smart Laser Sight",
+                gameCarom: "Carom (3-Cushion)",
+                descCarom: "3-Cushion Trajectories",
+                catTabletop: "Tabletop Games",
+                gameChess: "Chess AR",
+                descChess: "Position Analysis & Hints",
+                gameCheckers: "Checkers / Backgammon",
+                descCheckers: "Interactive Board Layout",
+                catCards: "Card Games",
+                gamePoker: "Poker Assistant",
+                descPoker: "Outs & Odds Calculation"
+            },
+            zh: {
+                tagline: "增强现实平台",
+                catBilliards: "台球组合",
+                gameFreeTrain: "自由 text 训练",
+                descFreeTrain: "智能激光瞄准器",
+                gameCarom: "开伦台球 (三边)",
+                descCarom: "三边轨迹预判",
+                catTabletop: "桌面游戏",
+                gameChess: "AR 国际象棋",
+                descChess: "局面分析与提示",
+                gameCheckers: "西洋跳棋 / 双陆棋",
+                descCheckers: "互动棋盘布局",
+                catCards: "纸牌游戏",
+                gamePoker: "扑克助手",
+                descPoker: "补牌与胜率计算"
+            },
+            es: {
+                tagline: "Plataforma de Realidad Aumentada",
+                catBilliards: "Grupo de Billar",
+                gameFreeTrain: "Entrenamiento Libre",
+                descFreeTrain: "Mira Láser Inteligente",
+                gameCarom: "Carambola (3 Bandas)",
+                descCarom: "Trayectorias de 3 bandas",
+                catTabletop: "Juegos de Mesa",
+                gameChess: "Ajedrez AR",
+                descChess: "Análisis de Posición y Pistas",
+                gameCheckers: "Damas / Backgammon",
+                descCheckers: "Diseño de Tablero Interactivo",
+                catCards: "Juegos de Cartas",
+                gamePoker: "Asistente de Póker",
+                descPoker: "Cálculo de Outs y Probabilidades"
+            }
+        };
+
+        const selector = document.getElementById('lang-selector');
+
+        function changeLanguage(lang) {
+            if (!translations[lang]) return;
+            
+            const data = translations[lang];
+            document.getElementById('loc-tagline').innerText = data.tagline;
+            document.getElementById('loc-cat-billiards').innerText = data.catBilliards;
+            document.getElementById('loc-game-free-train').innerText = data.gameFreeTrain;
+            document.getElementById('loc-desc-free-train').innerText = data.descFreeTrain;
+            document.getElementById('loc-game-carom').innerText = data.gameCarom;
+            document.getElementById('loc-desc-carom').innerText = data.descCarom;
+            document.getElementById('loc-cat-tabletop').innerText = data.catTabletop;
+            document.getElementById('loc-game-chess').innerText = data.gameChess;
+            document.getElementById('loc-desc-chess').innerText = data.descChess;
+            document.getElementById('loc-game-checkers').innerText = data.gameCheckers;
+            document.getElementById('loc-desc-checkers').innerText = data.descCheckers;
+            document.getElementById('loc-cat-cards').innerText = data.catCards;
+            document.getElementById('loc-game-poker').innerText = data.gamePoker;
+            document.getElementById('loc-desc-poker').innerText = data.descPoker;
+        }
+
+        // Отслеживаем выбор пользователя в выпадающем меню
+        selector.addEventListener('change', (e) => {
+            changeLanguage(e.target.value);
+        });
+    </script>
 </body>
 </html>
