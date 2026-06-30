@@ -101,7 +101,6 @@
             letter-spacing: 1px;
         }
 
-        /* Скролл-контейнер для категорий и игр */
         .menu-content {
             width: 100%;
             max-width: 440px;
@@ -169,7 +168,6 @@
             font-size: 1.4rem;
         }
 
-        /* Селектор языков */
         .footer-block {
             width: 100%;
             display: flex;
@@ -201,7 +199,7 @@
             color: #fff;
         }
 
-        /* Игровой HUD общий */
+        /* Игровой HUD */
         #game-hud {
             display: none;
             width: 100%;
@@ -219,7 +217,7 @@
             align-items: center;
         }
 
-        .back-btn {
+        .back-btn, .settings-btn {
             background: rgba(0, 0, 0, 0.6);
             color: #fff;
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -227,6 +225,13 @@
             border-radius: 20px;
             font-size: 0.9rem;
             cursor: pointer;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+
+        .settings-btn {
+            font-size: 1.2rem;
+            padding: 6px 14px;
         }
 
         .status-badge {
@@ -252,6 +257,94 @@
             text-align: center;
             white-space: nowrap;
         }
+
+        /* Всплывающая Панель Настроек внутри AR-мода */
+        #ar-settings-panel {
+            display: none;
+            position: absolute;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 360px;
+            background: rgba(15, 20, 18, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .setting-item label {
+            color: #aaa;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .color-options {
+            display: flex;
+            gap: 12px;
+        }
+
+        .color-dot {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+
+        .color-dot.active {
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        .thickness-slider {
+            width: 100%;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .thickness-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #00ff66;
+            cursor: pointer;
+        }
+
+        .length-slider {
+            width: 100%;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .length-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -265,7 +358,6 @@
     <div class="ui-layer">
         
         <div id="start-menu" class="interactive">
-            
             <div class="header-block">
                 <h1 class="logo">Dam-<span>ai</span></h1>
                 <p class="tagline" id="txt-tagline">Платформа дополненной реальности</p>
@@ -284,14 +376,34 @@
                     </select>
                 </div>
             </div>
-
         </div>
 
         <div id="game-hud">
             <div class="hud-header">
                 <button class="back-btn interactive" id="btn-back">← Меню</button>
                 <div class="status-badge" id="txt-status">AR Активно</div>
+                <button class="settings-btn interactive" id="btn-toggle-settings">⚙️</button>
             </div>
+
+            <div id="ar-settings-panel" class="interactive">
+                <div class="setting-item">
+                    <label id="lbl-color">Цвет лазера</label>
+                    <div class="color-options">
+                        <div class="color-dot active" style="background: #00ff66;" data-color="#00ff66"></div>
+                        <div class="color-dot" style="background: #ff3333;" data-color="#ff3333"></div>
+                        <div class="color-dot" style="background: #3388ff;" data-color="#3388ff"></div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label id="lbl-thickness">Толщина луча</label>
+                    <input type="range" min="1" max="10" value="3" class="thickness-slider" id="slider-thickness">
+                </div>
+                <div class="setting-item">
+                    <label id="lbl-length">Длина луча (Ограничение)</label>
+                    <input type="range" min="100" max="1500" value="600" class="length-slider" id="slider-length">
+                </div>
+            </div>
+
             <div class="aim-hint" id="txt-hint">Загрузка модуля игры...</div>
         </div>
 
@@ -309,7 +421,9 @@
                 cat_board: "Настольные игры",
                 cat_cards: "Карточные игры",
                 hint_billiards: "Тапните на биток и тяните в сторону для прицеливания",
-                hint_locked: "Этот игровой модуль находится в разработке"
+                lbl_color: "Цвет лазера",
+                lbl_thickness: "Толщина луча",
+                lbl_length: "Длина луча (Прицел)"
             },
             en: {
                 tagline: "Augmented Reality Platform",
@@ -318,7 +432,9 @@
                 cat_board: "Board Games",
                 cat_cards: "Card Games",
                 hint_billiards: "Tap on the cue ball and drag to aim",
-                hint_locked: "This game module is under development"
+                lbl_color: "Laser Color",
+                lbl_thickness: "Beam Thickness",
+                lbl_length: "Laser Length"
             },
             es: {
                 tagline: "Plataforma de Realidad Aumentada",
@@ -327,7 +443,9 @@
                 cat_board: "Juegos de Mesa",
                 cat_cards: "Juegos de Cartas",
                 hint_billiards: "Toca la bola blanca y arrastra para apuntar",
-                hint_locked: "Este módulo está en desarrollo"
+                lbl_color: "Color del Láser",
+                lbl_thickness: "Grosor del rayo",
+                lbl_length: "Longitud del láser"
             },
             zh: {
                 tagline: "增强现实游戏平台",
@@ -336,7 +454,9 @@
                 cat_board: "棋类游戏",
                 cat_cards: "棋牌纸牌",
                 hint_billiards: "点击母球并拖动手指进行瞄准",
-                hint_locked: "该游戏模块正在开发中"
+                lbl_color: "激光颜色",
+                lbl_thickness: "光束粗细",
+                lbl_length: "激光长度"
             }
         };
 
@@ -354,44 +474,13 @@
                 chess: { title: "Chess AR", desc: "Board analysis & best moves" },
                 checkers: { title: "Checkers", desc: "Combination analyzer" },
                 poker: { title: "Poker / Holdem", desc: "Win probability calculator" }
-            },
-            es: {
-                billiards_free: { title: "Entrenamiento Libre", desc: "Asistente de mira láser" },
-                billiards_carom: { title: "Carambola (3 Bandas)", desc: "Trayectorias de rebote" },
-                chess: { title: "Ajedrez AR", desc: "Análisis de tablero y jugadas" },
-                checkers: { title: "Damas", desc: "Analizador de combinaciones" },
-                poker: { title: "Póker / Holdem", desc: "Calculadora de probabilidades" }
-            },
-            zh: {
-                billiards_free: { title: "自由训练", desc: "智能激光瞄准辅助" },
-                billiards_carom: { title: "三边开伦", desc: "三边弹性轨迹预测" },
-                chess: { title: "AR 国际象棋", desc: "棋盘分析与最佳走法提示" },
-                checkers: { title: "国际跳棋", desc: "计算吃子组合" },
-                poker: { title: "德州扑к", desc: "实时胜率计算器" }
             }
         };
 
         const gameStructure = [
-            {
-                categoryKey: "cat_billiards",
-                games: [
-                    { id: "billiards_free", icon: "🎯", available: true },
-                    { id: "billiards_carom", icon: "🔒", available: false }
-                ]
-            },
-            {
-                categoryKey: "cat_board",
-                games: [
-                    { id: "chess", icon: "🔒", available: false },
-                    { id: "checkers", icon: "🔒", available: false }
-                ]
-            },
-            {
-                categoryKey: "cat_cards",
-                games: [
-                    { id: "poker", icon: "🔒", available: false }
-                ]
-            }
+            { categoryKey: "cat_billiards", games: [{ id: "billiards_free", icon: "🎯", available: true }, { id: "billiards_carom", icon: "🔒", available: false }] },
+            { categoryKey: "cat_board", games: [{ id: "chess", icon: "🔒", available: false }, { id: "checkers", icon: "🔒", available: false }] },
+            { categoryKey: "cat_cards", games: [{ id: "poker", icon: "🔒", available: false }] }
         ];
 
         let currentLang = 'ru';
@@ -406,14 +495,23 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
 
+        // Настройки AR лазера
+        let laserColor = "#00ff66";
+        let laserThickness = 3;
+        let maxLaserLength = 600;
+
+        const btnToggleSettings = document.getElementById('btn-toggle-settings');
+        const arSettingsPanel = document.getElementById('ar-settings-panel');
+        const sliderThickness = document.getElementById('slider-thickness');
+        const sliderLength = document.getElementById('slider-length');
+
         function renderMenu() {
             menuContainer.innerHTML = '';
             gameStructure.forEach(cat => {
                 const section = document.createElement('div');
                 section.className = 'category-section';
-                
                 const catTitle = document.createElement('h2');
-                catTitle.innerText = localization[currentLang][cat.categoryKey];
+                catTitle.innerText = localization[currentLang][cat.categoryKey] || cat.categoryKey;
                 section.appendChild(catTitle);
                 
                 const list = document.createElement('div');
@@ -422,8 +520,7 @@
                 cat.games.forEach(game => {
                     const card = document.createElement('div');
                     card.className = `game-card ${game.available ? 'available' : 'locked'} interactive`;
-                    
-                    const textData = gameTitles[currentLang][game.id];
+                    const textData = (gameTitles[currentLang] && gameTitles[currentLang][game.id]) ? gameTitles[currentLang][game.id] : {title: game.id, desc: ""};
                     card.innerHTML = `
                         <div class="game-info">
                             <h3>${textData.title}</h3>
@@ -431,7 +528,6 @@
                         </div>
                         <div class="game-icon">${game.icon}</div>
                     `;
-                    
                     if(game.available) {
                         card.addEventListener('click', () => launchGameModule(game.id));
                     }
@@ -441,11 +537,35 @@
                 menuContainer.appendChild(section);
             });
             document.getElementById('txt-tagline').innerText = localization[currentLang].tagline;
+            document.getElementById('lbl-color').innerText = localization[currentLang].lbl_color;
+            document.getElementById('lbl-thickness').innerText = localization[currentLang].lbl_thickness;
+            document.getElementById('lbl-length').innerText = localization[currentLang].lbl_length;
         }
 
         langUpdater.addEventListener('change', (e) => {
             currentLang = e.target.value;
             renderMenu();
+        });
+
+        // Открытие/закрытие панели настроек по кнопке ⚙️
+        btnToggleSettings.addEventListener('click', () => {
+            if (arSettingsPanel.style.display === 'flex') {
+                arSettingsPanel.style.display = 'none';
+            } else {
+                arSettingsPanel.style.display = 'flex';
+            }
+        });
+
+        // Обработка изменения параметров лазера
+        sliderThickness.addEventListener('input', (e) => { laserThickness = parseInt(e.target.value); });
+        sliderLength.addEventListener('input', (e) => { maxLaserLength = parseInt(e.target.value); });
+        
+        document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('click', (e) => {
+                document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+                e.target.classList.add('active');
+                laserColor = e.target.getAttribute('data-color');
+            });
         });
 
         function launchGameModule(gameId) {
@@ -467,6 +587,7 @@
             currentActiveGame = null;
             startMenu.style.display = 'flex';
             gameHud.style.display = 'none';
+            arSettingsPanel.style.display = 'none';
             canvas.style.pointerEvents = 'none';
             if (video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
@@ -476,76 +597,56 @@
         btnBack.addEventListener('click', closeActiveModule);
 
         // ==========================================
-        // 4. КОД ДЛЯ КОНКРЕТНОЙ ИГРЫ: "СВОБОДНАЯ ТРЕНИРОВКА" (ИНТЕРАКТИВ)
+        // 4. КОД ДЛЯ МОДУЛЯ: "СВОБОДНАЯ ТРЕНИРОВКА"
         // ==========================================
         let isBilliardsAiming = false;
-        
-        // Координаты центрального шара (битка)
-        let ballX = 0;
-        let ballY = 0;
-        
-        // Текущие координаты пальца (куда целимся)
-        let aimX = 0;
-        let aimY = 0;
-        
-        // Флаг того, что палец сейчас касается экрана
+        let ballX = 0, ballY = 0;
+        let aimX = 0, aimY = 0;
         let isTouching = false; 
 
         function initBilliardsFreeLogic() {
             isBilliardsAiming = true;
-            // По умолчанию ставим виртуальный биток ровно по центру экрана
             ballX = canvas.width / 2;
             ballY = canvas.height / 2;
             aimX = ballX;
-            aimY = ballY - 100; // Направлен изначально вверх
+            aimY = ballY - 100;
             isTouching = false;
         }
 
         canvas.addEventListener('touchstart', (e) => {
             if(!isBilliardsAiming) return;
-            const touch = e.touches[0];
+            // Проверяем, чтобы тап не был по панели настроек
+            if (arSettingsPanel.style.display === 'flex' && e.touches[0].clientY > arSettingsPanel.offsetTop) return;
             
-            // Фиксируем биток в точке первого тапа
+            const touch = e.touches[0];
             ballX = touch.clientX;
             ballY = touch.clientY;
-            
-            // Точка прицела изначально там же
             aimX = touch.clientX;
             aimY = touch.clientY;
-            
             isTouching = true;
         });
 
         canvas.addEventListener('touchmove', (e) => {
             if(!isBilliardsAiming || !isTouching) return;
             const touch = e.touches[0];
-            
-            // Обновляем только координату прицеливания при движении пальца
             aimX = touch.clientX;
             aimY = touch.clientY;
-            
             e.preventDefault();
         }, { passive: false });
 
-        canvas.addEventListener('touchend', () => {
-            // Когда отпустили палец, лазер застывает в текущем направлении
-            isTouching = false;
-        });
+        canvas.addEventListener('touchend', () => { isTouching = false; });
 
-        // Общий игровой цикл отрисовки
         function globalRenderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             if (currentActiveGame === 'billiards_free' && isBilliardsAiming) {
-                
-                // Вычисляем угол между битком (ballX, ballY) и пальцем (aimX, aimY)
                 let angle = Math.atan2(aimY - ballY, aimX - ballX);
 
                 ctx.save();
                 ctx.translate(ballX, ballY);
                 ctx.rotate(angle);
 
-                // 1. Отрисовка виртуального битка (белый шар)
+                // 1. Отрисовка битка (белый шар)
                 ctx.beginPath();
                 ctx.arc(0, 0, 16, 0, Math.PI * 2);
                 ctx.fillStyle = '#ffffff';
@@ -553,36 +654,69 @@
                 ctx.shadowColor = '#ffffff';
                 ctx.fill();
 
-                // Внутренний зеленый контур для стиля AR
+                // Внутреннее стильное кольцо под выбранный цвет
                 ctx.beginPath();
                 ctx.arc(0, 0, 8, 0, Math.PI * 2);
-                ctx.strokeStyle = '#00ff66';
+                ctx.strokeStyle = laserColor;
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                // 2. Отрисовка линии лазерного прицела вперед
+                // 2. Отрисовка ограниченной линии лазерного прицела
                 ctx.beginPath();
-                ctx.moveTo(16, 0); // Начинаем от края шара
-                ctx.lineTo(2000, 0); // Уходит вперед за горизонт
-                ctx.strokeStyle = isTouching ? 'rgba(0, 255, 102, 0.9)' : 'rgba(0, 255, 102, 0.4)';
-                ctx.lineWidth = isTouching ? 4 : 2; // Толще, когда ведем пальцем
+                ctx.moveTo(16, 0); 
+                ctx.lineTo(maxLaserLength, 0); // Ограничиваем длину динамическим ползунком
+                ctx.strokeStyle = isTouching ? laserColor : hexToRgbA(laserColor, 0.4);
+                ctx.lineWidth = laserThickness; 
                 ctx.shadowBlur = isTouching ? 15 : 5;
-                ctx.shadowColor = '#00ff66';
+                ctx.shadowColor = laserColor;
                 ctx.stroke();
 
-                // 3. Отрисовка линии кия назад (опционально, для наглядности вектора)
+                // 3. Отрисовка перекрестия на конце лазера (Точка контакта)
+                ctx.save();
+                ctx.translate(maxLaserLength, 0);
+                ctx.rotate(-angle); // Перекрестие стоит прямо относительно экрана
+                
+                ctx.beginPath();
+                // Горизонтальная линия перекрестия
+                ctx.moveTo(-10, 0); ctx.lineTo(10, 0);
+                // Вертикальная линия перекрестия
+                ctx.moveTo(0, -10); ctx.lineTo(0, 10);
+                ctx.strokeStyle = laserColor;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Маленькая центральная точка на перекрестии
+                ctx.beginPath();
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.restore();
+
+                // 4. Отрисовка линии кия назад
                 ctx.beginPath();
                 ctx.moveTo(-16, 0);
                 ctx.lineTo(-120, 0);
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
                 ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]); // Пунктирная линия кия
+                ctx.setLineDash([4, 4]);
                 ctx.stroke();
 
                 ctx.restore();
             }
 
             requestAnimationFrame(globalRenderLoop);
+        }
+
+        // Вспомогательная функция для прозрачности цвета лазера в покое
+        function hexToRgbA(hex, alpha){
+            let c;
+            if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
+                c= hex.substring(1).split('');
+                if(c.length== 3){ c= [c[0], c[0], c[1], c[1], c[2], c[2]]; }
+                c= '0x'+c.join('');
+                return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
+            }
+            return hex;
         }
 
         function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
