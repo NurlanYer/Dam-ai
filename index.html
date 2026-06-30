@@ -17,7 +17,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000;
+            background-color: #0d0f12; /* Чуть светлее чистого черного, чтобы сразу понять, если CSS завелся */
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
 
@@ -28,6 +28,7 @@
             width: 100%;
             height: 100%;
             z-index: 1;
+            background: #000;
         }
 
         video {
@@ -60,7 +61,7 @@
             pointer-events: auto;
         }
 
-        /* Главное Меню */
+        /* Главное Меню — УБРАЛИ blur-фильтры, теперь это просто надежный темный фон */
         #start-menu {
             display: flex;
             flex-direction: column;
@@ -68,9 +69,7 @@
             align-items: center;
             width: 100%;
             height: 100%;
-            background: rgba(10, 15, 12, 0.88);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
+            background: #0f1310; 
             padding: 30px 20px;
             overflow-y: auto;
         }
@@ -90,7 +89,7 @@
 
         .logo span {
             color: #00ff66;
-            text-shadow: 0 0 20px rgba(0, 255, 102, 0.6);
+            text-shadow: 0 0 15px rgba(0, 255, 102, 0.4);
         }
 
         .tagline {
@@ -127,20 +126,17 @@
         }
 
         .game-card {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 14px;
             padding: 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
-            transition: all 0.2s ease;
         }
 
         .game-card.available { border-color: rgba(0, 255, 102, 0.3); }
-        .game-card.available:active { transform: scale(0.98); background: rgba(0, 255, 102, 0.08); border-color: #00ff66; }
-        .game-card.locked { opacity: 0.4; cursor: not-allowed; }
 
         .game-info h3 { color: #fff; font-size: 1.05rem; margin-bottom: 3px; }
         .game-info p { color: #aaa; font-size: 0.8rem; }
@@ -152,10 +148,10 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.08);
             padding: 6px 14px;
             border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
         .lang-select {
@@ -165,7 +161,6 @@
             font-size: 0.9rem;
             font-weight: 600;
             outline: none;
-            cursor: pointer;
         }
 
         .lang-select option { background: #111; color: #fff; }
@@ -189,15 +184,13 @@
         }
 
         .back-btn, .settings-btn, .calibrate-btn {
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.75);
             color: #fff;
             border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 10px 18px;
             border-radius: 20px;
             font-size: 0.9rem;
             cursor: pointer;
-            backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
             display: flex;
             align-items: center;
             gap: 5px;
@@ -207,29 +200,18 @@
         .calibrate-btn { border-color: rgba(0, 255, 102, 0.4); color: #00ff66; font-weight: 600; }
         .calibrate-btn.active-mode { background: #00ff66; color: #000; border-color: #00ff66; }
 
-        .status-badge {
-            background: rgba(0, 255, 102, 0.2);
-            color: #00ff66;
-            border: 1px solid #00ff66;
-            padding: 6px 14px;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
         .aim-hint {
             position: absolute;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.85);
             color: #fff;
             padding: 10px 20px;
             border-radius: 20px;
             font-size: 0.9rem;
             text-align: center;
             white-space: nowrap;
-            transition: all 0.3s ease;
         }
 
         /* Панель Настроек */
@@ -241,13 +223,11 @@
             transform: translateX(-50%);
             width: 90%;
             max-width: 360px;
-            background: rgba(15, 20, 18, 0.9);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: #131714;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 20px;
             padding: 20px;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
             flex-direction: column;
             gap: 15px;
         }
@@ -256,12 +236,12 @@
         .setting-item label { color: #aaa; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
 
         .color-options { display: flex; gap: 12px; }
-        .color-dot { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
+        .color-dot { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
         .color-dot.active { border-color: #fff; transform: scale(1.1); }
 
         .thickness-slider, .length-slider { width: 100%; -webkit-appearance: none; background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; outline: none; }
-        .thickness-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #00ff66; cursor: pointer; }
-        .length-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; cursor: pointer; }
+        .thickness-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #00ff66; }
+        .length-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
     </style>
 </head>
 <body>
@@ -327,9 +307,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // 1. БАЗА ДАННЫХ ЛОКАЛИЗАЦИИ
-        // ==========================================
         const localization = {
             ru: {
                 tagline: "Платформа дополненной реальности",
@@ -363,17 +340,15 @@
 
         const gameTitles = {
             ru: {
-                billiards_free: { title: "Свободная тренировка", desc: "Умный лазерный прицел" },
-                billiards_carom: { title: "Карамболь (Тройка)", desc: "Траектории от трех бортов" }
+                billiards_free: { title: "Свободная тренировка", desc: "Умный лазерный прицел" }
             },
             en: {
-                billiards_free: { title: "Free Training", desc: "Smart laser aiming assist" },
-                billiards_carom: { title: "Carom (3-Cushion)", desc: "3-cushion bounce trajectories" }
+                billiards_free: { title: "Free Training", desc: "Smart laser aiming assist" }
             }
         };
 
         const gameStructure = [
-            { categoryKey: "cat_billiards", games: [{ id: "billiards_free", icon: "🎯", available: true }] }
+            { categoryKey: "cat_billiards", games: [{ id: "billiards_free", icon: "🎯" }] }
         ];
 
         let currentLang = 'ru';
@@ -393,7 +368,7 @@
         let maxLaserLength = 600;
 
         let isCalibratingMode = false;
-        let isVideoReady = false; // Безопасность: флаг готовности камеры
+        let isVideoReady = false; 
         
         let tableCorners = [
             { x: 100, y: 150 },
@@ -413,10 +388,7 @@
         const btnCalibrate = document.getElementById('btn-calibrate');
         const txtBtnCalib = document.getElementById('txt-btn-calib');
 
-        // Отслеживаем готовность потока видео, чтобы избежать падений drawImage
-        video.addEventListener('loadedmetadata', () => {
-            isVideoReady = true;
-        });
+        video.addEventListener('loadedmetadata', () => { isVideoReady = true; });
 
         function renderMenu() {
             menuContainer.innerHTML = '';
@@ -433,7 +405,7 @@
                 cat.games.forEach(game => {
                     const card = document.createElement('div');
                     card.className = `game-card available interactive`;
-                    const textData = (gameTitles[currentLang] && gameTitles[currentLang][game.id]) ? gameTitles[currentLang][game.id] : {title: game.id, desc: ""};
+                    const textData = gameTitles[currentLang][game.id];
                     card.innerHTML = `
                         <div class="game-info">
                             <h3>${textData.title}</h3>
@@ -517,9 +489,6 @@
 
         btnBack.addEventListener('click', closeActiveModule);
 
-        // ==========================================
-        // 4. ТАЧ-СОБЫТИЯ И УПРАВЛЕНИЕ
-        // ==========================================
         let isBilliardsAiming = false;
         let ballX = 0, ballY = 0;
         let aimX = 0, aimY = 0;
@@ -575,16 +544,11 @@
 
         canvas.addEventListener('touchend', () => { isTouching = false; draggedCorner = null; });
 
-        // ==========================================
-        // 5. ГЛОБАЛЬНЫЙ ЦИКЛ ОТРИСОВКИ (БЕЗОПАСНЫЙ)
-        // ==========================================
         function globalRenderLoop() {
-            // Очищаем холст аккуратно под текущий размер
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             if (currentActiveGame === 'billiards_free' && isBilliardsAiming) {
                 
-                // Сглаживание координат углов
                 if (isCalibratingMode && targetCorners.length === tableCorners.length) {
                     for (let i = 0; i < tableCorners.length; i++) {
                         tableCorners[i].x += (targetCorners[i].x - tableCorners[i].x) * SMOOTHING_FACTOR;
@@ -592,7 +556,6 @@
                     }
                 }
 
-                // 1. Контур стола
                 ctx.beginPath();
                 ctx.moveTo(tableCorners[0].x, tableCorners[0].y);
                 ctx.lineTo(tableCorners[1].x, tableCorners[1].y);
@@ -602,10 +565,8 @@
                 
                 ctx.strokeStyle = isCalibratingMode ? '#00ff66' : 'rgba(255, 255, 255, 0.15)';
                 ctx.lineWidth = isCalibratingMode ? 3 : 1;
-                if (isCalibratingMode) { ctx.shadowBlur = 10; ctx.shadowColor = '#00ff66'; } else { ctx.shadowBlur = 0; }
                 ctx.stroke();
 
-                // 2. Отрисовка углов разметки
                 if (isCalibratingMode) {
                     tableCorners.forEach((corner, i) => {
                         ctx.beginPath();
@@ -623,7 +584,6 @@
                         ctx.stroke();
                     });
 
-                    // БЕЗОПАСНАЯ ЛУПА ПРИЦЕЛИВАНИЯ
                     if (draggedCorner !== null && isVideoReady) {
                         try {
                             const activeCorner = tableCorners[draggedCorner];
@@ -638,7 +598,6 @@
                             ctx.arc(magX + magnifyingSize/2, magY + magnifyingSize/2, magnifyingSize/2, 0, Math.PI * 2);
                             ctx.clip();
 
-                            // Защищенный drawImage (если видео-поток пуст или сбоит, блок просто пропустится)
                             ctx.drawImage(
                                 video, 
                                 Math.max(0, activeCorner.x - (magnifyingSize / (2 * zoom))), 
@@ -669,10 +628,7 @@
                             ctx.arc(magX + magnifyingSize/2, magY + magnifyingSize/2, magnifyingSize/2, 0, Math.PI * 2);
                             ctx.strokeStyle = '#ffffff';
                             ctx.lineWidth = 3;
-                            ctx.shadowBlur = 15;
-                            ctx.shadowColor = '#00ff66';
                             ctx.stroke();
-                            ctx.shadowBlur = 0; 
 
                             ctx.beginPath();
                             ctx.moveTo(magX + magnifyingSize/2 - 10, magY + magnifyingSize/2); ctx.lineTo(magX + magnifyingSize/2 + 10, magY + magnifyingSize/2);
@@ -680,13 +636,10 @@
                             ctx.strokeStyle = '#ff3333'; 
                             ctx.lineWidth = 1.5;
                             ctx.stroke();
-                        } catch (e) {
-                            console.log("Ожидание полной инициализации текстуры лупы...");
-                        }
+                        } catch (e) {}
                     }
                 }
 
-                // 3. Отрисовка лазера
                 if (!isCalibratingMode) {
                     let angle = Math.atan2(aimY - ballY, aimX - ballX);
 
@@ -696,7 +649,7 @@
 
                     ctx.beginPath();
                     ctx.arc(0, 0, 16, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ffffff'; ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff';
+                    ctx.fillStyle = '#ffffff';
                     ctx.fill();
 
                     ctx.beginPath();
@@ -707,7 +660,7 @@
                     ctx.beginPath();
                     ctx.moveTo(16, 0); ctx.lineTo(maxLaserLength, 0);
                     ctx.strokeStyle = isTouching ? laserColor : hexToRgbA(laserColor, 0.4);
-                    ctx.lineWidth = laserThickness; ctx.shadowBlur = isTouching ? 15 : 5; ctx.shadowColor = laserColor;
+                    ctx.lineWidth = laserThickness;
                     ctx.stroke();
 
                     ctx.save();
@@ -742,10 +695,7 @@
             return hex;
         }
 
-        function resizeCanvas() { 
-            canvas.width = window.innerWidth; 
-            canvas.height = window.innerHeight; 
-        }
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resizeCanvas);
         
         async function initCamera() {
