@@ -346,4 +346,418 @@
                 btn_calib_save: "Сохранить форму"
             },
             en: {
-                tagline: "Augmented Reality
+                tagline: "Augmented Reality Platform",
+                status: "AR Active",
+                cat_billiards: "Billiards Group",
+                cat_board: "Board Games",
+                cat_cards: "Card Games",
+                hint_billiards: "Tap on the cue ball and drag to aim",
+                hint_calibrate: "Drag 4 corners. Use the zoom magnifier at the top!",
+                lbl_color: "Laser Color",
+                lbl_thickness: "Beam Thickness",
+                lbl_length: "Laser Length",
+                btn_calib_start: "Table Setup",
+                btn_calib_save: "Save Borders"
+            }
+        };
+
+        const gameTitles = {
+            ru: {
+                billiards_free: { title: "Свободная тренировка", desc: "Умный лазерный прицел" },
+                billiards_carom: { title: "Карамболь (Тройка)", desc: "Траектории от трех бортов" }
+            },
+            en: {
+                billiards_free: { title: "Free Training", desc: "Smart laser aiming assist" },
+                billiards_carom: { title: "Carom (3-Cushion)", desc: "3-cushion bounce trajectories" }
+            }
+        };
+
+        const gameStructure = [
+            { categoryKey: "cat_billiards", games: [{ id: "billiards_free", icon: "🎯", available: true }] }
+        ];
+
+        let currentLang = 'ru';
+        let currentActiveGame = null;
+
+        const menuContainer = document.getElementById('menu-games-content');
+        const langUpdater = document.getElementById('lang-updater');
+        const startMenu = document.getElementById('start-menu');
+        const gameHud = document.getElementById('game-hud');
+        const btnBack = document.getElementById('btn-back');
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('webcam');
+
+        let laserColor = "#00ff66";
+        let laserThickness = 3;
+        let maxLaserLength = 600;
+
+        let isCalibratingMode = false;
+        let isVideoReady = false; // Безопасность: флаг готовности камеры
+        
+        let tableCorners = [
+            { x: 100, y: 150 },
+            { x: 300, y: 150 },
+            { x: 300, y: 450 },
+            { x: 100, y: 450 }
+        ];
+        let targetCorners = [];
+        let draggedCorner = null;
+
+        const SMOOTHING_FACTOR = 0.15; 
+
+        const btnToggleSettings = document.getElementById('btn-toggle-settings');
+        const arSettingsPanel = document.getElementById('ar-settings-panel');
+        const sliderThickness = document.getElementById('slider-thickness');
+        const sliderLength = document.getElementById('slider-length');
+        const btnCalibrate = document.getElementById('btn-calibrate');
+        const txtBtnCalib = document.getElementById('txt-btn-calib');
+
+        // Отслеживаем готовность потока видео, чтобы избежать падений drawImage
+        video.addEventListener('loadedmetadata', () => {
+            isVideoReady = true;
+        });
+
+        function renderMenu() {
+            menuContainer.innerHTML = '';
+            gameStructure.forEach(cat => {
+                const section = document.createElement('div');
+                section.className = 'category-section';
+                const catTitle = document.createElement('h2');
+                catTitle.innerText = localization[currentLang][cat.categoryKey] || cat.categoryKey;
+                section.appendChild(catTitle);
+                
+                const list = document.createElement('div');
+                list.className = 'games-list';
+                
+                cat.games.forEach(game => {
+                    const card = document.createElement('div');
+                    card.className = `game-card available interactive`;
+                    const textData = (gameTitles[currentLang] && gameTitles[currentLang][game.id]) ? gameTitles[currentLang][game.id] : {title: game.id, desc: ""};
+                    card.innerHTML = `
+                        <div class="game-info">
+                            <h3>${textData.title}</h3>
+                            <p>${textData.desc}</p>
+                        </div>
+                        <div class="game-icon">${game.icon}</div>
+                    `;
+                    card.addEventListener('click', () => launchGameModule(game.id));
+                    list.appendChild(card);
+                });
+                section.appendChild(list);
+                menuContainer.appendChild(section);
+            });
+            document.getElementById('txt-tagline').innerText = localization[currentLang].tagline;
+            document.getElementById('lbl-color').innerText = localization[currentLang].lbl_color;
+            document.getElementById('lbl-thickness').innerText = localization[currentLang].lbl_thickness;
+            document.getElementById('lbl-length').innerText = localization[currentLang].lbl_length;
+            updateCalibrateButtonText();
+        }
+
+        function updateCalibrateButtonText() {
+            txtBtnCalib.innerText = isCalibratingMode ? localization[currentLang].btn_calib_save : localization[currentLang].btn_calib_start;
+        }
+
+        langUpdater.addEventListener('change', (e) => { currentLang = e.target.value; renderMenu(); });
+        btnToggleSettings.addEventListener('click', () => { arSettingsPanel.style.display = arSettingsPanel.style.display === 'flex' ? 'none' : 'flex'; });
+
+        btnCalibrate.addEventListener('click', () => {
+            isCalibratingMode = !isCalibratingMode;
+            if (isCalibratingMode) {
+                btnCalibrate.classList.add('active-mode');
+                document.getElementById('txt-hint').innerText = localization[currentLang].hint_calibrate;
+                arSettingsPanel.style.display = 'none';
+            } else {
+                btnCalibrate.classList.remove('active-mode');
+                document.getElementById('txt-hint').innerText = localization[currentLang].hint_billiards;
+            }
+            updateCalibrateButtonText();
+        });
+
+        sliderThickness.addEventListener('input', (e) => { laserThickness = parseInt(e.target.value); });
+        sliderLength.addEventListener('input', (e) => { maxLaserLength = parseInt(e.target.value); });
+        
+        document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('click', (e) => {
+                document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+                e.target.classList.add('active');
+                laserColor = e.target.getAttribute('data-color');
+            });
+        });
+
+        function launchGameModule(gameId) {
+            currentActiveGame = gameId;
+            initCamera();
+            startMenu.style.display = 'none';
+            gameHud.style.display = 'block';
+            
+            const initBox = [
+                { x: window.innerWidth * 0.15, y: window.innerHeight * 0.25 },
+                { x: window.innerWidth * 0.85, y: window.innerHeight * 0.25 },
+                { x: window.innerWidth * 0.85, y: window.innerHeight * 0.75 },
+                { x: window.innerWidth * 0.15, y: window.innerHeight * 0.75 }
+            ];
+            tableCorners = JSON.parse(JSON.stringify(initBox));
+            targetCorners = JSON.parse(JSON.stringify(initBox));
+
+            if (gameId === 'billiards_free') {
+                document.getElementById('txt-hint').innerText = localization[currentLang].hint_billiards;
+                canvas.style.pointerEvents = 'auto';
+                initBilliardsFreeLogic();
+            }
+        }
+
+        function closeActiveModule() {
+            isBilliardsAiming = false; isCalibratingMode = false;
+            btnCalibrate.classList.remove('active-mode'); currentActiveGame = null;
+            startMenu.style.display = 'flex'; gameHud.style.display = 'none'; arSettingsPanel.style.display = 'none';
+            canvas.style.pointerEvents = 'none'; isVideoReady = false;
+            if (video.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); }
+        }
+
+        btnBack.addEventListener('click', closeActiveModule);
+
+        // ==========================================
+        // 4. ТАЧ-СОБЫТИЯ И УПРАВЛЕНИЕ
+        // ==========================================
+        let isBilliardsAiming = false;
+        let ballX = 0, ballY = 0;
+        let aimX = 0, aimY = 0;
+        let isTouching = false; 
+
+        function initBilliardsFreeLogic() {
+            isBilliardsAiming = true; ballX = canvas.width / 2; ballY = canvas.height / 2;
+            aimX = ballX; aimY = ballY - 100; isTouching = false;
+        }
+
+        canvas.addEventListener('touchstart', (e) => {
+            if(!isBilliardsAiming) return;
+            const touch = e.touches[0];
+            const tX = touch.clientX;
+            const tY = touch.clientY;
+
+            if (isCalibratingMode) {
+                draggedCorner = null;
+                for (let i = 0; i < tableCorners.length; i++) {
+                    let dist = Math.hypot(tableCorners[i].x - tX, tableCorners[i].y - tY);
+                    if (dist < 45) {
+                        draggedCorner = i;
+                        targetCorners[i].x = tX;
+                        targetCorners[i].y = tY;
+                        break;
+                    }
+                }
+                return;
+            }
+
+            if (arSettingsPanel.style.display === 'flex' && tY > arSettingsPanel.offsetTop) return;
+            ballX = tX; ballY = tY; aimX = tX; aimY = tY; isTouching = true;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const tX = touch.clientX;
+            const tY = touch.clientY;
+
+            if (isCalibratingMode) {
+                if (draggedCorner !== null) {
+                    targetCorners[draggedCorner].x = tX;
+                    targetCorners[draggedCorner].y = tY;
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if(!isBilliardsAiming || !isTouching) return;
+            aimX = tX; aimY = tY;
+            e.preventDefault();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', () => { isTouching = false; draggedCorner = null; });
+
+        // ==========================================
+        // 5. ГЛОБАЛЬНЫЙ ЦИКЛ ОТРИСОВКИ (БЕЗОПАСНЫЙ)
+        // ==========================================
+        function globalRenderLoop() {
+            // Очищаем холст аккуратно под текущий размер
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (currentActiveGame === 'billiards_free' && isBilliardsAiming) {
+                
+                // Сглаживание координат углов
+                if (isCalibratingMode && targetCorners.length === tableCorners.length) {
+                    for (let i = 0; i < tableCorners.length; i++) {
+                        tableCorners[i].x += (targetCorners[i].x - tableCorners[i].x) * SMOOTHING_FACTOR;
+                        tableCorners[i].y += (targetCorners[i].y - tableCorners[i].y) * SMOOTHING_FACTOR;
+                    }
+                }
+
+                // 1. Контур стола
+                ctx.beginPath();
+                ctx.moveTo(tableCorners[0].x, tableCorners[0].y);
+                ctx.lineTo(tableCorners[1].x, tableCorners[1].y);
+                ctx.lineTo(tableCorners[2].x, tableCorners[2].y);
+                ctx.lineTo(tableCorners[3].x, tableCorners[3].y);
+                ctx.closePath();
+                
+                ctx.strokeStyle = isCalibratingMode ? '#00ff66' : 'rgba(255, 255, 255, 0.15)';
+                ctx.lineWidth = isCalibratingMode ? 3 : 1;
+                if (isCalibratingMode) { ctx.shadowBlur = 10; ctx.shadowColor = '#00ff66'; } else { ctx.shadowBlur = 0; }
+                ctx.stroke();
+
+                // 2. Отрисовка углов разметки
+                if (isCalibratingMode) {
+                    tableCorners.forEach((corner, i) => {
+                        ctx.beginPath();
+                        ctx.arc(corner.x, corner.y, 14, 0, Math.PI * 2);
+                        ctx.fillStyle = i === draggedCorner ? '#ffffff' : 'rgba(0, 255, 102, 0.8)';
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2;
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(corner.x - 6, corner.y); ctx.lineTo(corner.x + 6, corner.y);
+                        ctx.moveTo(corner.x, corner.y - 6); ctx.lineTo(corner.x, corner.y + 6);
+                        ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    });
+
+                    // БЕЗОПАСНАЯ ЛУПА ПРИЦЕЛИВАНИЯ
+                    if (draggedCorner !== null && isVideoReady) {
+                        try {
+                            const activeCorner = tableCorners[draggedCorner];
+                            const magnifyingSize = 120; 
+                            const magX = canvas.width / 2 - magnifyingSize / 2; 
+                            const magY = 90; 
+                            const zoom = 3;  
+
+                            ctx.save();
+                            
+                            ctx.beginPath();
+                            ctx.arc(magX + magnifyingSize/2, magY + magnifyingSize/2, magnifyingSize/2, 0, Math.PI * 2);
+                            ctx.clip();
+
+                            // Защищенный drawImage (если видео-поток пуст или сбоит, блок просто пропустится)
+                            ctx.drawImage(
+                                video, 
+                                Math.max(0, activeCorner.x - (magnifyingSize / (2 * zoom))), 
+                                Math.max(0, activeCorner.y - (magnifyingSize / (2 * zoom))), 
+                                magnifyingSize / zoom, 
+                                magnifyingSize / zoom,
+                                magX, magY, 
+                                magnifyingSize, magnifyingSize
+                            );
+
+                            ctx.strokeStyle = '#00ff66';
+                            ctx.lineWidth = 2;
+                            ctx.translate(magX + magnifyingSize / 2, magY + magnifyingSize / 2);
+                            ctx.scale(zoom, zoom);
+                            ctx.translate(-activeCorner.x, -activeCorner.y);
+
+                            ctx.beginPath();
+                            ctx.moveTo(tableCorners[0].x, tableCorners[0].y);
+                            ctx.lineTo(tableCorners[1].x, tableCorners[1].y);
+                            ctx.lineTo(tableCorners[2].x, tableCorners[2].y);
+                            ctx.lineTo(tableCorners[3].x, tableCorners[3].y);
+                            ctx.closePath();
+                            ctx.stroke();
+
+                            ctx.restore();
+
+                            ctx.beginPath();
+                            ctx.arc(magX + magnifyingSize/2, magY + magnifyingSize/2, magnifyingSize/2, 0, Math.PI * 2);
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 3;
+                            ctx.shadowBlur = 15;
+                            ctx.shadowColor = '#00ff66';
+                            ctx.stroke();
+                            ctx.shadowBlur = 0; 
+
+                            ctx.beginPath();
+                            ctx.moveTo(magX + magnifyingSize/2 - 10, magY + magnifyingSize/2); ctx.lineTo(magX + magnifyingSize/2 + 10, magY + magnifyingSize/2);
+                            ctx.moveTo(magX + magnifyingSize/2, magY + magnifyingSize/2 - 10); ctx.lineTo(magX + magnifyingSize/2, magY + magnifyingSize/2 + 10);
+                            ctx.strokeStyle = '#ff3333'; 
+                            ctx.lineWidth = 1.5;
+                            ctx.stroke();
+                        } catch (e) {
+                            console.log("Ожидание полной инициализации текстуры лупы...");
+                        }
+                    }
+                }
+
+                // 3. Отрисовка лазера
+                if (!isCalibratingMode) {
+                    let angle = Math.atan2(aimY - ballY, aimX - ballX);
+
+                    ctx.save();
+                    ctx.translate(ballX, ballY);
+                    ctx.rotate(angle);
+
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 16, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffffff'; ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff';
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.strokeStyle = laserColor; ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(16, 0); ctx.lineTo(maxLaserLength, 0);
+                    ctx.strokeStyle = isTouching ? laserColor : hexToRgbA(laserColor, 0.4);
+                    ctx.lineWidth = laserThickness; ctx.shadowBlur = isTouching ? 15 : 5; ctx.shadowColor = laserColor;
+                    ctx.stroke();
+
+                    ctx.save();
+                    ctx.translate(maxLaserLength, 0); ctx.rotate(-angle);
+                    ctx.beginPath();
+                    ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.moveTo(0, -10); ctx.lineTo(0, 10);
+                    ctx.strokeStyle = laserColor; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+                    ctx.restore();
+
+                    ctx.beginPath();
+                    ctx.moveTo(-16, 0); ctx.lineTo(-120, 0);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+
+                    ctx.restore();
+                }
+            }
+
+            requestAnimationFrame(globalRenderLoop);
+        }
+
+        function hexToRgbA(hex, alpha){
+            let c;
+            if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
+                c= hex.substring(1).split('');
+                if(c.length== 3){ c= [c[0], c[0], c[1], c[1], c[2], c[2]]; }
+                c= '0x'+c.join('');
+                return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
+            }
+            return hex;
+        }
+
+        function resizeCanvas() { 
+            canvas.width = window.innerWidth; 
+            canvas.height = window.innerHeight; 
+        }
+        window.addEventListener('resize', resizeCanvas);
+        
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+                video.srcObject = stream;
+            } catch (err) { console.error("Камера недоступна:", err); }
+        }
+
+        resizeCanvas();
+        renderMenu();
+        globalRenderLoop();
+    </script>
+</body>
+</html>
