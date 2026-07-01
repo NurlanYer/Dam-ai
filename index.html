@@ -160,21 +160,14 @@
             border: 1px solid rgba(255, 255, 255, 0.12);
         }
 
-<div class="game-card locked">
-    <div class="game-info">
-        <h3 id="loc-game-checkers">Шашки / Нарды</h3>
-        <p id="loc-desc-checkers">Интерактивная разметка</p>
-    </div>
-    <div class="game-icon">🎲</div>
-</div>
-
-<a href="checkers.html" class="game-card available">
-    <div class="game-info">
-        <h3 id="loc-game-checkers">Шашки / Нарды</h3>
-        <p id="loc-desc-checkers">Интерактивная разметка</p>
-    </div>
-    <div class="game-icon">🎲</div>
-</a>
+        .lang-select {
+            background: transparent;
+            color: #fff;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
         }
 
         .lang-select option {
@@ -193,7 +186,6 @@
 
         <div class="menu-content">
             
-            <!-- КАТЕГОРИЯ: БИЛЬЯРД -->
             <div class="category-section">
                 <h2 id="loc-cat-billiards">Бильярдная группа</h2>
                 <div class="games-list">
@@ -215,7 +207,6 @@
                 </div>
             </div>
 
-            <!-- КАТЕГОРИЯ: НАСТОЛЬНЫЕ ИГРЫ -->
             <div class="category-section">
                 <h2 id="loc-cat-tabletop">Настольные игры</h2>
                 <div class="games-list">
@@ -227,17 +218,16 @@
                         <div class="game-icon">👑</div>
                     </a>
                     
-                    <div class="game-card locked">
+                    <a href="checkers.html" class="game-card available">
                         <div class="game-info">
                             <h3 id="loc-game-checkers">Шашки / Нарды</h3>
                             <p id="loc-desc-checkers">Интерактивная разметка</p>
                         </div>
                         <div class="game-icon">🎲</div>
-                    </div>
+                    </a>
                 </div>
             </div>
 
-            <!-- КАТЕГОРИЯ: КАРТЫ -->
             <div class="category-section">
                 <h2 id="loc-cat-cards">Карточные игры</h2>
                 <div class="games-list">
@@ -326,7 +316,7 @@
                 descCarom: "Trayectorias de 3 bandas",
                 catTabletop: "Juegos de Mesa",
                 gameChess: "Ajedrez AR",
-                descChess: "Análisis de Posición y Pistas",
+                descChess: "Análisis de Posición и Pistas",
                 gameCheckers: "Damas / Backgammon",
                 descCheckers: "Diseño de Tablero Interactivo",
                 catCards: "Juegos de Cartas",
@@ -357,7 +347,6 @@
             document.getElementById('loc-desc-poker').innerText = data.descPoker;
         }
 
-        // Отслеживаем выбор пользователя в выпадающем меню
         selector.addEventListener('change', (e) => {
             changeLanguage(e.target.value);
         });
