@@ -53,9 +53,16 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
         
-        let src, dst, cap;
+        let src, dst;
         let cvReady = false;
         let cameraReady = false;
+
+        // Переменные нового адаптивного трекера
+        let isTracked = false;
+        let oldGray = null;
+        let p0 = null;
+        let p1 = null;
+        const boardWarpSize = 400; // Размер результирующего плоского квадрата доски
 
         // 1. Включение камеры с гарантированным разрешением
         async function initCamera() {
@@ -70,7 +77,6 @@
                 });
                 video.srcObject = stream;
                 
-                // Ждем, пока видео реально начнет воспроизводиться
                 await new Promise((resolve) => {
                     video.onloadedmetadata = () => {
                         video.play().then(resolve);
@@ -83,7 +89,7 @@
                 console.error("Ошибка доступа к камере:", err);
                 document.getElementById('status-indicator').className = "pulse-dot error";
                 document.getElementById('engine-status').innerText = "Ошибка камеры";
-                document.getElementById('txt-hint').innerText = "Пожалуйста, разрешите доступ к камере в настройках браузера и обновите страницу.";
+                document.getElementById('txt-hint').innerText = "Пожалуйста, разрешите доступ к камере в настройках и обновите страницу.";
             }
         }
 
@@ -97,93 +103,190 @@
 
         function checkReadyToStart() {
             if (cvReady && cameraReady) {
-                // Переключаем интерфейс
                 const dot = document.getElementById('status-indicator');
                 dot.classList.remove('loading');
                 document.getElementById('engine-status').innerText = "CV: Сканирование активно";
-                document.getElementById('txt-hint').innerText = "Положите доску перед камерой. Контуры считаются автоматически.";
+                document.getElementById('txt-hint').innerText = "Положите доску перед камерой под любым углом.";
                 
-                // Жестко задаем размеры матриц, избегая 0
                 const width = video.videoWidth || 640;
                 const height = video.videoHeight || 480;
                 
                 src = new cv.Mat(height, width, cv.CV_8UC4);
                 dst = new cv.Mat(height, width, cv.CV_8UC1);
-                cap = new cv.VideoCapture(video);
+                oldGray = new cv.Mat();
+                p0 = new cv.Mat();
+                p1 = new cv.Mat();
                 
-                processVideo();
+                requestAnimationFrame(processVideo);
             }
         }
 
-        // 3. Цикл обработки кадров
+        // Вспомогательный алгоритм: группировка и фильтрация узоров доски в сетку 9x9 (81 точка)
+        function filterAndStructureGrid(detectedCorners, outputPoints) {
+            if (detectedCorners.rows < 81) return false;
+
+            let pointsArray = [];
+            for (let i = 0; i < detectedCorners.rows; i++) {
+                pointsArray.push({ x: detectedCorners.data32F[i * 2], y: detectedCorners.data32F[i * 2 + 1] });
+            }
+
+            // Грубая сортировка по Y для разбиения на строки
+            pointsArray.sort((a, b) => a.y - b.y);
+
+            let rows = [];
+            let currentRow = [pointsArray[0]];
+            let yThreshold = 20; 
+
+            for (let i = 1; i < pointsArray.length; i++) {
+                if (Math.abs(pointsArray[i].y - currentRow[0].y) < yThreshold) {
+                    currentRow.push(pointsArray[i]);
+                } else {
+                    rows.push(currentRow);
+                    currentRow = [pointsArray[i]];
+                }
+            }
+            rows.push(currentRow);
+
+            // Ищем ровно 9 стабильных линий, в каждой из которых не менее 9 углов клеток
+            let validRows = rows.filter(r => r.length >= 9);
+            if (validRows.length < 9) return false;
+
+            let finalGrid = [];
+            for (let i = 0; i < 9; i++) {
+                validRows[i].sort((a, b) => a.x - b.x);
+                for (let j = 0; j < 9; j++) {
+                    finalGrid.push(validRows[i][j].x);
+                    finalGrid.push(validRows[i][j].y);
+                }
+            }
+
+            let tmpMat = cv.matFromArray(81, 1, cv.CV_32FC2, finalGrid);
+            tmpMat.copyTo(outputPoints);
+            tmpMat.delete();
+            return true;
+        }
+
+        // Выпрямление перспективы на основе экстремальных точек сетки
+        function warpPerspectiveBoard(srcFrame, boardCorners) {
+            // Выбираем 4 угла нашей структуры 9х9 (индексы: 0, 8, 72, 80)
+            let srcCoords = [
+                boardCorners.data32F[0], boardCorners.data32F[1],       // Левый верхний
+                boardCorners.data32F[8 * 2], boardCorners.data32F[8 * 2 + 1], // Правый верхний
+                boardCorners.data32F[80 * 2], boardCorners.data32F[80 * 2 + 1], // Правый нижний
+                boardCorners.data32F[72 * 2], boardCorners.data32F[72 * 2 + 1]  // Левый нижний
+            ];
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, srcCoords);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0,
+                boardWarpSize, 0,
+                boardWarpSize, boardWarpSize,
+                0, boardWarpSize
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            let warped = new cv.Mat();
+            cv.warpPerspective(srcFrame, warped, M, new cv.Size(boardWarpSize, boardWarpSize));
+
+            // -------------------------------------------------------------
+            // [ФУНКЦИЯ ОПРЕДЕЛЕНИЯ ШАШЕК]
+            // Переменная 'warped' содержит идеальный 2D вид сверху 400x400 пикселей.
+            // -------------------------------------------------------------
+            detectCheckersOnFlatBoard(warped);
+
+            srcTri.delete();
+            dstTri.delete();
+            M.delete();
+            warped.delete();
+        }
+
+        // Заглушка под логику игры (вызывается на выпрямленном кадре)
+        function detectCheckersOnFlatBoard(warpedMat) {
+            // Тут ваш будущий код анализа 64 клеток на наличие шашек
+        }
+
+        // 3. Основной цикл обработки кадров
         function processVideo() {
             if (!cvReady || !cameraReady) return;
 
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
-            let approx = new cv.Mat();
+            // Захватываем текущий кадр с тега video в матрицу 'src'
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            src.data.set(imageData.data);
+
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
             try {
-                cap.read(src);
-                cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
-                cv.GaussianBlur(dst, dst, new cv.Size(5, 5), 0);
-                cv.adaptiveThreshold(dst, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 21, 4);
+                if (!isTracked) {
+                    // --- ЭТАП 1 И 2: ПОИСК СЕТКИ (КАЛИБРОВКА) ---
+                    let corners = new cv.Mat();
+                    // Ищем пересечения линий (Х-фичи). Полностью игнорирует узоры.
+                    cv.goodFeaturesToTrack(gray, corners, 150, 0.04, 8);
 
-                cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                let maxArea = 0;
-                let boardPoints = [];
-
-                for (let i = 0; i < contours.size(); ++i) {
-                    let cnt = contours.get(i);
-                    let area = cv.contourArea(cnt);
-                    let perimeter = cv.arcLength(cnt, true);
-                    
-                    cv.approxPolyDP(cnt, approx, 0.035 * perimeter, true);
-
-                    if (approx.rows === 4 && area > 7000 && area > maxArea) {
-                        maxArea = area;
-                        boardPoints = [];
-                        for (let k = 0; k < 4; k++) {
-                            boardPoints.push({
-                                x: approx.data32S[k * 2],
-                                y: approx.data32S[k * 2 + 1]
-                            });
-                        }
+                    if (filterAndStructureGrid(corners, p0)) {
+                        isTracked = true;
+                        gray.copyTo(oldGray);
+                        document.getElementById('engine-status').innerText = "CV: Трекинг активен";
+                        document.getElementById('txt-hint').innerText = "Геометрия доски зафиксирована. Ракурс адаптивный.";
                     }
-                    cnt.delete();
-                }
-
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                if (boardPoints.length === 4) {
-                    ctx.strokeStyle = "#00ff66";
-                    ctx.lineWidth = 4;
-                    ctx.shadowColor = "#00ff66";
-                    ctx.shadowBlur = 10;
-                    ctx.beginPath();
+                    corners.delete();
                     
-                    const scaleX = canvas.width / src.cols;
-                    const scaleY = canvas.height / src.rows;
+                    // Рисуем статус поиска контуров на интерфейсе
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                } else {
+                    // --- ЭТАП 3: ТРЕКИНГ В РЕАЛЬНОМ ВРЕМЕНИ (KLT ОПТИЧЕСКИЙ ПОТОК) ---
+                    let status = new cv.Mat();
+                    let err = new cv.Mat();
 
-                    ctx.moveTo(boardPoints[0].x * scaleX, boardPoints[0].y * scaleY);
-                    for (let j = 1; j < 4; j++) {
-                        ctx.lineTo(boardPoints[j].x * scaleX, boardPoints[j].y * scaleY);
+                    cv.calcOpticalFlowPyrLK(oldGray, gray, p0, p1, status, err);
+
+                    let trackedPointsCount = 0;
+                    for (let i = 0; i < status.rows; i++) {
+                        if (status.data[i] === 1) trackedPointsCount++;
                     }
-                    ctx.closePath();
-                    ctx.stroke();
-                    ctx.shadowBlur = 0;
-                }
 
+                    // Если удерживаем сетку уверенно, выпрямляем ракурс
+                    if (trackedPointsCount >= 72) {
+                        p1.copyTo(p0);
+                        gray.copyTo(oldGray);
+
+                        // Очищаем оверлей и рисуем только ребра сетки для AR эффекта
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.strokeStyle = "#00ff66";
+                        ctx.lineWidth = 2;
+                        
+                        const scaleX = canvas.width / src.cols;
+                        const scaleY = canvas.height / src.rows;
+
+                        // Отрисовка внешней рамки игрового поля поверх видео
+                        ctx.beginPath();
+                        ctx.moveTo(p0.data32F[0] * scaleX, p0.data32F[1] * scaleY);
+                        ctx.lineTo(p0.data32F[8 * 2] * scaleX, p0.data32F[8 * 2 + 1] * scaleY);
+                        ctx.lineTo(p0.data32F[80 * 2] * scaleX, p0.data32F[80 * 2 + 1] * scaleY);
+                        ctx.lineTo(p0.data32F[72 * 2] * scaleX, p0.data32F[72 * 2 + 1] * scaleY);
+                        ctx.closePath();
+                        ctx.stroke();
+
+                        // --- ЭТАП 4: СТАТИЧЕСКАЯ ТРАНСФОРМАЦИЯ ---
+                        warpPerspectiveBoard(src, p0);
+                    } else {
+                        // Слишком быстро дернули камеру — сброс в калибровку
+                        isTracked = false;
+                        document.getElementById('engine-status').innerText = "CV: Поиск доски...";
+                        document.getElementById('txt-hint').innerText = "Потерян фокус. Наведите камеру обратно на сетку доски.";
+                    }
+
+                    status.delete();
+                    err.delete();
+                }
             } catch (err) {
-                console.error("Ошибка CV кадра:", err);
+                console.error("Критическая ошибка CV:", err);
             } finally {
-                contours.delete();
-                hierarchy.delete();
-                approx.delete();
+                gray.delete();
             }
 
-            setTimeout(processVideo, 33);
+            requestAnimationFrame(processVideo);
         }
 
         function resize() { 
@@ -194,7 +297,7 @@
         window.addEventListener('resize', resize);
         resize();
         
-        // Запуск
+        // Запуск системы
         initCamera();
     </script>
     
