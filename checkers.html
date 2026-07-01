@@ -18,6 +18,7 @@
         .ai-status { background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(0, 255, 102, 0.3); padding: 8px 16px; border-radius: 20px; color: #00ff66; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
         .pulse-dot { width: 8px; height: 8px; background-color: #00ff66; border-radius: 50%; animation: pulse 1.5s infinite; }
         .pulse-dot.loading { background-color: #ffcc00; animation: pulse 1s infinite; }
+        .pulse-dot.error { background-color: #ff3333; animation: none; }
         
         .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 12px 24px; border-radius: 24px; font-size: 0.9rem; text-align: center; max-width: 90%; line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); }
         
@@ -27,7 +28,6 @@
             100% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 102, 0); }
         }
     </style>
-    <script async src="https://docs.opencv.org/4.5.4/opencv.js" id="opencv-js"></script>
 </head>
 <body>
 
@@ -41,4 +41,163 @@
         <div class="header">
             <a href="./" class="btn interactive">←  Меню</a>
             <div class="ai-status">
-                <div id="status-indicator" class
+                <div id="status-indicator" class="pulse-dot loading"></div>
+                <span id="engine-status">CV: Загрузка ИИ-зрения...</span>
+            </div>
+        </div>
+        <div class="hint" id="txt-hint">Инициализация камеры и модулей автоопределения доски...</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('webcam');
+        
+        let src, dst, cap;
+        let cvReady = false;
+        let cameraReady = false;
+
+        // 1. Включение камеры с гарантированным разрешением
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment', 
+                        width: { ideal: 640 }, 
+                        height: { ideal: 480 } 
+                    }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+                
+                // Ждем, пока видео реально начнет воспроизводиться
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play().then(resolve);
+                    };
+                });
+                
+                cameraReady = true;
+                checkReadyToStart();
+            } catch (err) {
+                console.error("Ошибка доступа к камере:", err);
+                document.getElementById('status-indicator').className = "pulse-dot error";
+                document.getElementById('engine-status').innerText = "Ошибка камеры";
+                document.getElementById('txt-hint').innerText = "Пожалуйста, разрешите доступ к камере в настройках браузера и обновите страницу.";
+            }
+        }
+
+        // 2. Безопасная проверка готовности OpenCV
+        var Module = {
+            onRuntimeInitialized: function() {
+                cvReady = true;
+                checkReadyToStart();
+            }
+        };
+
+        function checkReadyToStart() {
+            if (cvReady && cameraReady) {
+                // Переключаем интерфейс
+                const dot = document.getElementById('status-indicator');
+                dot.classList.remove('loading');
+                document.getElementById('engine-status').innerText = "CV: Сканирование активно";
+                document.getElementById('txt-hint').innerText = "Положите доску перед камерой. Контуры считаются автоматически.";
+                
+                // Жестко задаем размеры матриц, избегая 0
+                const width = video.videoWidth || 640;
+                const height = video.videoHeight || 480;
+                
+                src = new cv.Mat(height, width, cv.CV_8UC4);
+                dst = new cv.Mat(height, width, cv.CV_8UC1);
+                cap = new cv.VideoCapture(video);
+                
+                processVideo();
+            }
+        }
+
+        // 3. Цикл обработки кадров
+        function processVideo() {
+            if (!cvReady || !cameraReady) return;
+
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            let approx = new cv.Mat();
+
+            try {
+                cap.read(src);
+                cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+                cv.GaussianBlur(dst, dst, new cv.Size(5, 5), 0);
+                cv.adaptiveThreshold(dst, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 21, 4);
+
+                cv.findContours(dst, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                let maxArea = 0;
+                let boardPoints = [];
+
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+                    let perimeter = cv.arcLength(cnt, true);
+                    
+                    cv.approxPolyDP(cnt, approx, 0.035 * perimeter, true);
+
+                    if (approx.rows === 4 && area > 7000 && area > maxArea) {
+                        maxArea = area;
+                        boardPoints = [];
+                        for (let k = 0; k < 4; k++) {
+                            boardPoints.push({
+                                x: approx.data32S[k * 2],
+                                y: approx.data32S[k * 2 + 1]
+                            });
+                        }
+                    }
+                    cnt.delete();
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (boardPoints.length === 4) {
+                    ctx.strokeStyle = "#00ff66";
+                    ctx.lineWidth = 4;
+                    ctx.shadowColor = "#00ff66";
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    
+                    const scaleX = canvas.width / src.cols;
+                    const scaleY = canvas.height / src.rows;
+
+                    ctx.moveTo(boardPoints[0].x * scaleX, boardPoints[0].y * scaleY);
+                    for (let j = 1; j < 4; j++) {
+                        ctx.lineTo(boardPoints[j].x * scaleX, boardPoints[j].y * scaleY);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+
+            } catch (err) {
+                console.error("Ошибка CV кадра:", err);
+            } finally {
+                contours.delete();
+                hierarchy.delete();
+                approx.delete();
+            }
+
+            setTimeout(processVideo, 33);
+        }
+
+        function resize() { 
+            canvas.width = window.innerWidth; 
+            canvas.height = window.innerHeight; 
+        }
+        
+        window.addEventListener('resize', resize);
+        resize();
+        
+        // Запуск
+        initCamera();
+    </script>
+    
+    <script async src="https://docs.opencv.org/4.5.4/opencv.js"></script>
+</body>
+</html>
