@@ -58,17 +58,17 @@
         let cvReady = false;
         let cameraReady = false;
 
-        // Переменные адаптивного трекера
+        // Настройки трекера
         let isTracked = false;
         let oldGray = null;
         let p0 = null;
         let p1 = null;
         const boardWarpSize = 400; 
 
-        // Матрица виртуального состояния доски (0 - пусто, 1 - белая шашка, 2 - темная шашка)
+        // Матрица игры (0 - пусто, 1 - белая, 2 - темная)
         let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
 
-        // 1. Включение камеры
+        // 1. Инициализация камеры
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -90,14 +90,14 @@
                 cameraReady = true;
                 checkReadyToStart();
             } catch (err) {
-                console.error("Ошибка доступа к камере:", err);
+                console.error("Ошибка камеры:", err);
                 document.getElementById('status-indicator').className = "pulse-dot error";
                 document.getElementById('engine-status').innerText = "Ошибка камеры";
-                document.getElementById('txt-hint').innerText = "Пожалуйста, разрешите доступ к камере в настройках и обновите страницу.";
+                document.getElementById('txt-hint').innerText = "Предоставьте доступ к камере.";
             }
         }
 
-        // 2. Проверка готовности OpenCV
+        // 2. Инициализация OpenCV
         var Module = {
             onRuntimeInitialized: function() {
                 cvReady = true;
@@ -110,7 +110,7 @@
                 const dot = document.getElementById('status-indicator');
                 dot.classList.remove('loading');
                 document.getElementById('engine-status').innerText = "CV: Сканирование активно";
-                document.getElementById('txt-hint').innerText = "Положите доску по центру экрана под любым углом.";
+                document.getElementById('txt-hint').innerText = "Поместите поле клеток строго в центр экрана.";
                 
                 const width = video.videoWidth || 640;
                 const height = video.videoHeight || 480;
@@ -125,7 +125,7 @@
             }
         }
 
-        // Алгоритм: группировка и фильтрация узоров доски в сетку 9x9 (81 точка)
+        // Структурирование сетки
         function filterAndStructureGrid(detectedCorners, outputPoints) {
             if (detectedCorners.rows < 81) return false;
 
@@ -168,8 +168,10 @@
             return true;
         }
 
-        // Выпрямление перспективы
+        // Трансформация перспективы
         function warpPerspectiveBoard(srcFrame, boardCorners) {
+            if(!boardCorners.data32F || boardCorners.rows < 81) return;
+
             let srcCoords = [
                 boardCorners.data32F[0], boardCorners.data32F[1],       
                 boardCorners.data32F[8 * 2], boardCorners.data32F[8 * 2 + 1], 
@@ -179,10 +181,7 @@
 
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, srcCoords);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                0, 0,
-                boardWarpSize, 0,
-                boardWarpSize, boardWarpSize,
-                0, boardWarpSize
+                0, 0, boardWarpSize, 0, boardWarpSize, boardWarpSize, 0, boardWarpSize
             ]);
 
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
@@ -197,7 +196,7 @@
             warped.delete();
         }
 
-        // ИИ-анализатор клеток
+        // Детекция шашек на выпрямленном квадрате
         function detectCheckersOnFlatBoard(warpedMat) {
             let cellSize = boardWarpSize / 8; 
 
@@ -212,12 +211,13 @@
                         let meanColor = cv.mean(cellRoi); 
                         let brightness = meanColor[0]; 
 
-                        if (brightness < 70) {
+                        // Адаптировано под деревянные текстуры
+                        if (brightness < 75) {
                             boardState[row][col] = 2; // Темная шашка
-                        } else if (brightness > 165) {
+                        } else if (brightness > 160) {
                             boardState[row][col] = 1; // Светлая шашка
                         } else {
-                            boardState[row][col] = 0; // Пусто
+                            boardState[row][col] = 0; // Пустая клетка
                         }
 
                         cellRoi.delete();
@@ -226,18 +226,16 @@
                     }
                 }
             }
-
             calculateAndDrawMoves();
         }
 
-        // Расчет ходов и AR-подсветка
+        // Поиск ходов и их рендеринг
         function calculateAndDrawMoves() {
-            if (!src) return; // Безопасная проверка, чтобы скрипт не падал при запуске
+            if (!src || !src.cols) return; 
             
             const scaleX = canvas.width / src.cols;
             const scaleY = canvas.height / src.rows;
             let cellSize = boardWarpSize / 8;
-
             let hasMoves = false;
 
             for (let r = 0; r < 7; r++) { 
@@ -256,107 +254,4 @@
             }
 
             if (hasMoves) {
-                document.getElementById('txt-hint').innerText = "Анализ завершен. Доступные ходы подсвечены голубым.";
-            } else {
-                document.getElementById('txt-hint').innerText = "Доска распознана. Сделайте ход или поменяйте позицию.";
-            }
-        }
-
-        // Проекция координат на экран смартфона
-        function drawNeonTargetCircle(row, col, scaleX, scaleY, cellSize) {
-            if (!p0 || !p0.data32F) return;
-
-            let targetX = col * cellSize + cellSize / 2;
-            let targetY = row * cellSize + cellSize / 2;
-
-            let normX = targetX / boardWarpSize;
-            let normY = targetY / boardWarpSize;
-
-            let topX = p0.data32F[0] + (p0.data32F[8 * 2] - p0.data32F[0]) * normX;
-            let topY = p0.data32F[1] + (p0.data32F[8 * 2 + 1] - p0.data32F[1]) * normX;
-            let bottomX = p0.data32F[72 * 2] + (p0.data32F[80 * 2] - p0.data32F[72 * 2]) * normX;
-            let bottomY = p0.data32F[72 * 2 + 1] + (p0.data32F[80 * 2 + 1] - p0.data32F[72 * 2 + 1]) * normX;
-
-            let finalScreenX = (topX + (bottomX - topX) * normY) * scaleX;
-            let finalScreenY = (topY + (bottomY - topY) * normY) * scaleY;
-
-            ctx.shadowColor = "#00ffff";
-            ctx.shadowBlur = 12;
-            ctx.fillStyle = "rgba(0, 255, 255, 0.7)";
-            ctx.beginPath();
-            ctx.arc(finalScreenX, finalScreenY, cellSize * scaleX * 0.35, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        }
-
-        // 3. Основной цикл обработки кадров
-        function processVideo() {
-            if (!cvReady || !cameraReady || !src) return;
-
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            src.data.set(imageData.data);
-
-            let gray = new cv.Mat();
-            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-            try {
-                if (!isTracked) {
-                    let corners = new cv.Mat();
-                    
-                    // Маска для фокусировки в центре (70% экрана)
-                    let mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
-                    let rect = new cv.Rect(gray.cols * 0.15, gray.rows * 0.15, gray.cols * 0.7, gray.rows * 0.7);
-                    let roi = mask.roi(rect);
-                    roi.setTo(new cv.Scalar(255));
-
-                    cv.goodFeaturesToTrack(gray, corners, 140, 0.04, 8, mask);
-
-                    if (filterAndStructureGrid(corners, p0)) {
-                        isTracked = true;
-                        gray.copyTo(oldGray);
-                        document.getElementById('status-indicator').className = "pulse-dot";
-                        document.getElementById('engine-status').innerText = "CV: Трекинг активен";
-                    }
-                    
-                    corners.delete();
-                    mask.delete();
-                    roi.delete();
-                    
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                } else {
-                    let status = new cv.Mat();
-                    let err = new cv.Mat();
-
-                    cv.calcOpticalFlowPyrLK(oldGray, gray, p0, p1, status, err);
-
-                    let trackedPointsCount = 0;
-                    for (let i = 0; i < status.rows; i++) {
-                        if (status.data[i] === 1) trackedPointsCount++;
-                    }
-
-                    if (trackedPointsCount >= 70) {
-                        p1.copyTo(p0);
-                        gray.copyTo(oldGray);
-
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.strokeStyle = "#00ff66";
-                        ctx.lineWidth = 3;
-                        
-                        const scaleX = canvas.width / src.cols;
-                        const scaleY = canvas.height / src.rows;
-
-                        ctx.beginPath();
-                        ctx.moveTo(p0.data32F[0] * scaleX, p0.data32F[1] * scaleY);
-                        ctx.lineTo(p0.data32F[8 * 2] * scaleX, p0.data32F[8 * 2 + 1] * scaleY);
-                        ctx.lineTo(p0.data32F[80 * 2] * scaleX, p0.data32F[80 * 2 + 1] * scaleY);
-                        ctx.lineTo(p0.data32F[72 * 2] * scaleX, p0.data32F[72 * 2 + 1] * scaleY);
-                        ctx.closePath();
-                        ctx.stroke();
-
-                        warpPerspectiveBoard(src, p0);
-                    } else {
-                        isTracked = false;
-                        document.getElementById('status-indicator').className = "pulse-dot loading";
-                        document.getElementById('engine-status').innerText = "CV: Поиск доски...";
-                        document.getElementById('txt
+                document.getElementById('txt-hint').innerText = "Анализ завершен. Доступные ходы подсвечены голубым
