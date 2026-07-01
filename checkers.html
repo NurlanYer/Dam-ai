@@ -53,7 +53,8 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
         
-        let src, dst;
+        let src = null;
+        let dst = null;
         let cvReady = false;
         let cameraReady = false;
 
@@ -62,12 +63,12 @@
         let oldGray = null;
         let p0 = null;
         let p1 = null;
-        const boardWarpSize = 400; // Размер результирующего плоского квадрата доски
+        const boardWarpSize = 400; 
 
         // Матрица виртуального состояния доски (0 - пусто, 1 - белая шашка, 2 - темная шашка)
         let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
 
-        // 1. Включение камеры с гарантированным разрешением
+        // 1. Включение камеры
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -96,7 +97,7 @@
             }
         }
 
-        // 2. Безопасная проверка готовности OpenCV
+        // 2. Проверка готовности OpenCV
         var Module = {
             onRuntimeInitialized: function() {
                 cvReady = true;
@@ -124,7 +125,7 @@
             }
         }
 
-        // Вспомогательный алгоритм: группировка и фильтрация узоров доски в сетку 9x9 (81 точка)
+        // Алгоритм: группировка и фильтрация узоров доски в сетку 9x9 (81 точка)
         function filterAndStructureGrid(detectedCorners, outputPoints) {
             if (detectedCorners.rows < 81) return false;
 
@@ -133,7 +134,6 @@
                 pointsArray.push({ x: detectedCorners.data32F[i * 2], y: detectedCorners.data32F[i * 2 + 1] });
             }
 
-            // Грубая сортировка по Y для разбиения на строки
             pointsArray.sort((a, b) => a.y - b.y);
 
             let rows = [];
@@ -150,7 +150,6 @@
             }
             rows.push(currentRow);
 
-            // Ищем ровно 9 стабильных линий, в каждой из которых не менее 9 углов клеток
             let validRows = rows.filter(r => r.length >= 9);
             if (validRows.length < 9) return false;
 
@@ -169,13 +168,13 @@
             return true;
         }
 
-        // Выпрямление перспективы и запуск ИИ-анализа шашек
+        // Выпрямление перспективы
         function warpPerspectiveBoard(srcFrame, boardCorners) {
             let srcCoords = [
-                boardCorners.data32F[0], boardCorners.data32F[1],             // Левый верхний (0,0)
-                boardCorners.data32F[8 * 2], boardCorners.data32F[8 * 2 + 1],   // Правый верхний (8,0)
-                boardCorners.data32F[80 * 2], boardCorners.data32F[80 * 2 + 1], // Правый нижний (8,8)
-                boardCorners.data32F[72 * 2], boardCorners.data32F[72 * 2 + 1]  // Левый нижний (0,8)
+                boardCorners.data32F[0], boardCorners.data32F[1],       
+                boardCorners.data32F[8 * 2], boardCorners.data32F[8 * 2 + 1], 
+                boardCorners.data32F[80 * 2], boardCorners.data32F[80 * 2 + 1], 
+                boardCorners.data32F[72 * 2], boardCorners.data32F[72 * 2 + 1]  
             ];
 
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, srcCoords);
@@ -190,7 +189,6 @@
             let warped = new cv.Mat();
             cv.warpPerspective(srcFrame, warped, M, new cv.Size(boardWarpSize, boardWarpSize));
 
-            // Запускаем ИИ детекцию фигур на идеально ровной текстуре
             detectCheckersOnFlatBoard(warped);
 
             srcTri.delete();
@@ -199,64 +197,56 @@
             warped.delete();
         }
 
-        // ИИ-анализатор: сканирование 64 клеток на выпрямленной доске
+        // ИИ-анализатор клеток
         function detectCheckersOnFlatBoard(warpedMat) {
-            let cellSize = boardWarpSize / 8; // 50 пикселей на клетку
+            let cellSize = boardWarpSize / 8; 
 
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
-                    // Шашки играют только на темных клетках
                     if ((row + col) % 2 === 1) {
-                        
-                        // Вырезаем центральную зону 16х16 пикселей внутри клетки
                         let x = col * cellSize + (cellSize - 16) / 2;
                         let y = row * cellSize + (cellSize - 16) / 2;
                         let rect = new cv.Rect(x, y, 16, 16);
                         let cellRoi = warpedMat.roi(rect);
                         
-                        // Вычисляем средний цвет и яркость центра клетки
                         let meanColor = cv.mean(cellRoi); 
-                        let brightness = meanColor[0]; // Значение яркости в Grayscale (0-255)
+                        let brightness = meanColor[0]; 
 
-                        // Адаптивные пороги под дерево вашей доски:
                         if (brightness < 70) {
-                            boardState[row][col] = 2; // Темная/коричневая шашка
+                            boardState[row][col] = 2; // Темная шашка
                         } else if (brightness > 165) {
                             boardState[row][col] = 1; // Светлая шашка
                         } else {
-                            boardState[row][col] = 0; // Пустая темная клетка
+                            boardState[row][col] = 0; // Пусто
                         }
 
                         cellRoi.delete();
                     } else {
-                        boardState[row][col] = 0; // Светлые клетки всегда пусты
+                        boardState[row][col] = 0; 
                     }
                 }
             }
 
-            // Вычисляем и отрисовываем ходы на экране поверх видео
             calculateAndDrawMoves();
         }
 
-        // Расчет ходов и вывод неоновой графики в дополненной реальности (AR)
+        // Расчет ходов и AR-подсветка
         function calculateAndDrawMoves() {
+            if (!src) return; // Безопасная проверка, чтобы скрипт не падал при запуске
+            
             const scaleX = canvas.width / src.cols;
             const scaleY = canvas.height / src.rows;
             let cellSize = boardWarpSize / 8;
 
             let hasMoves = false;
 
-            // Пример аналитики: Ищем темные шашки (тип 2) и рассчитываем их ходы вниз (row + 1)
-            for (let r = 0; r < 7; r++) { // до 7 строки, чтобы не выйти за границы
+            for (let r = 0; r < 7; r++) { 
                 for (let c = 0; c < 8; c++) {
                     if (boardState[r][c] === 2) { 
-                        
-                        // Проверяем диагональный ход вправо-вниз
                         if (c + 1 < 8 && boardState[r + 1][c + 1] === 0) {
                             drawNeonTargetCircle(r + 1, c + 1, scaleX, scaleY, cellSize);
                             hasMoves = true;
                         }
-                        // Проверяем диагональный ход влево-вниз
                         if (c - 1 >= 0 && boardState[r + 1][c - 1] === 0) {
                             drawNeonTargetCircle(r + 1, c - 1, scaleX, scaleY, cellSize);
                             hasMoves = true;
@@ -272,16 +262,16 @@
             }
         }
 
-        // Функция проекции 2D-координаты клетки обратно в 3D-перспективу экрана смартфона
+        // Проекция координат на экран смартфона
         function drawNeonTargetCircle(row, col, scaleX, scaleY, cellSize) {
+            if (!p0 || !p0.data32F) return;
+
             let targetX = col * cellSize + cellSize / 2;
             let targetY = row * cellSize + cellSize / 2;
 
-            // Математическая интерполяция положения клетки относительно 4-х углов зафиксированного поля
             let normX = targetX / boardWarpSize;
             let normY = targetY / boardWarpSize;
 
-            // Вычисляем физическую точку на экране устройства
             let topX = p0.data32F[0] + (p0.data32F[8 * 2] - p0.data32F[0]) * normX;
             let topY = p0.data32F[1] + (p0.data32F[8 * 2 + 1] - p0.data32F[1]) * normX;
             let bottomX = p0.data32F[72 * 2] + (p0.data32F[80 * 2] - p0.data32F[72 * 2]) * normX;
@@ -290,23 +280,19 @@
             let finalScreenX = (topX + (bottomX - topX) * normY) * scaleX;
             let finalScreenY = (topY + (bottomY - topY) * normY) * scaleY;
 
-            // Рисуем красивый неоновый AR-индикатор хода
             ctx.shadowColor = "#00ffff";
             ctx.shadowBlur = 12;
             ctx.fillStyle = "rgba(0, 255, 255, 0.7)";
             ctx.beginPath();
             ctx.arc(finalScreenX, finalScreenY, cellSize * scaleX * 0.35, 0, 2 * Math.PI);
             ctx.fill();
-            
-            // Сброс тени, чтобы не тормозил интерфейс
             ctx.shadowBlur = 0;
         }
 
         // 3. Основной цикл обработки кадров
         function processVideo() {
-            if (!cvReady || !cameraReady) return;
+            if (!cvReady || !cameraReady || !src) return;
 
-            // Захватываем текущий кадр видео на canvas-слой
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             src.data.set(imageData.data);
@@ -316,16 +302,14 @@
 
             try {
                 if (!isTracked) {
-                    // --- ЭТАП 1 И 2: КАЛИБРОВКА (ФОКУСИРОВАННЫЙ ПОИСК СЕТКИ) ---
                     let corners = new cv.Mat();
                     
-                    // СОЗДАЕМ МАСКУ: Ограничиваем область поиска центром (70% экрана)
+                    // Маска для фокусировки в центре (70% экрана)
                     let mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
                     let rect = new cv.Rect(gray.cols * 0.15, gray.rows * 0.15, gray.cols * 0.7, gray.rows * 0.7);
                     let roi = mask.roi(rect);
                     roi.setTo(new cv.Scalar(255));
 
-                    // Ищем углы клеток СТРОГО внутри маски (игнорируем мусор вокруг)
                     cv.goodFeaturesToTrack(gray, corners, 140, 0.04, 8, mask);
 
                     if (filterAndStructureGrid(corners, p0)) {
@@ -341,7 +325,6 @@
                     
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                 } else {
-                    // --- ЭТАП 3: РЕАЛЬНОЕ ВРЕМЯ (KLT ОПТИЧЕСКИЙ ПОТОК) ---
                     let status = new cv.Mat();
                     let err = new cv.Mat();
 
@@ -352,7 +335,6 @@
                         if (status.data[i] === 1) trackedPointsCount++;
                     }
 
-                    // Если удерживаем сетку уверенно, выпрямляем ракурс и рисуем AR
                     if (trackedPointsCount >= 70) {
                         p1.copyTo(p0);
                         gray.copyTo(oldGray);
@@ -364,7 +346,6 @@
                         const scaleX = canvas.width / src.cols;
                         const scaleY = canvas.height / src.rows;
 
-                        // Отрисовка зеленой AR-рамки игрового поля поверх видео
                         ctx.beginPath();
                         ctx.moveTo(p0.data32F[0] * scaleX, p0.data32F[1] * scaleY);
                         ctx.lineTo(p0.data32F[8 * 2] * scaleX, p0.data32F[8 * 2 + 1] * scaleY);
@@ -373,21 +354,9 @@
                         ctx.closePath();
                         ctx.stroke();
 
-                        // --- ЭТАП 4: СТАТИЧЕСКАЯ ТРАНСФОРМАЦИЯ И АНАЛИЗ ШАШЕК ---
                         warpPerspectiveBoard(src, p0);
                     } else {
-                        // Сброс в режим калибровки при резком уходе из кадра
                         isTracked = false;
                         document.getElementById('status-indicator').className = "pulse-dot loading";
                         document.getElementById('engine-status').innerText = "CV: Поиск доски...";
-                        document.getElementById('txt-hint').innerText = "Потерян фокус. Поместите игровое поле в центр экрана.";
-                    }
-
-                    status.delete();
-                    err.delete();
-                }
-            } catch (err) {
-                console.error("Критическая ошибка CV кадра:", err);
-            } finally {
-                gray.delete();
-            }
+                        document.getElementById('txt
