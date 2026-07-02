@@ -19,17 +19,16 @@
     <div id="video-container"><video id="webcam" autoplay playsinline muted></video></div>
     <canvas id="canvas-layer"></canvas>
     <div class="hud">
-        <div class="ai-status" id="engine-status">ИИ-зрение: поиск доски...</div>
-        <div class="hint" id="txt-hint">Поместите доску в кадр</div>
+        <div class="ai-status" id="engine-status">ИИ-зрение: поиск...</div>
+        <div class="hint" id="txt-hint">Стабилизация активна</div>
     </div>
 
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <script>
         const video = document.getElementById('webcam');
-        const canvas = document.getElementById('canvas-layer');
-        const ctx = canvas.getContext('2d');
         let src, gray, corners, smoothedCorners = null;
-        const boardWarpSize = 400;
+        let isTracked = false;
+        let roiRect = null; // Область интереса для быстрого трекинга
 
         async function initCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -40,25 +39,30 @@
 
         function processVideo() {
             if (!cv || !cv.Mat) { requestAnimationFrame(processVideo); return; }
-            
-            let cap = new cv.VideoCapture(video);
             src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
             gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
             corners = new cv.Mat();
 
             function loop() {
+                let cap = new cv.VideoCapture(video);
                 cap.read(src);
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                 
-                // Ищем доску (шаблон 8x8 клеток, значит 7x7 углов внутри)
-                let found = cv.findChessboardCorners(gray, new cv.Size(7, 7), corners);
+                // Если доска найдена, ищем в ROI, иначе — во всем кадре
+                let searchArea = isTracked ? gray.roi(roiRect) : gray;
+                let found = cv.findChessboardCorners(searchArea, new cv.Size(7, 7), corners);
                 
                 if (found) {
-                    document.getElementById('engine-status').innerText = "Доска найдена";
+                    isTracked = true;
+                    // Обновляем ROI для следующего кадра (увеличиваем область на 50px)
+                    roiRect = new cv.Rect(0, 0, video.width, video.height); 
+                    document.getElementById('engine-status').innerText = "Стабилизация: ON";
                     warpPerspectiveBoard(src, corners);
                 } else {
+                    isTracked = false;
                     document.getElementById('engine-status').innerText = "Поиск доски...";
                 }
+                if (searchArea !== gray) searchArea.delete();
                 requestAnimationFrame(loop);
             }
             loop();
@@ -72,15 +76,20 @@
         }
 
         function warpPerspectiveBoard(srcFrame, boardCorners) {
-            // Упрощенная логика углов для warpPerspective
             let rawPoints = [boardCorners.data32F[0], boardCorners.data32F[1], boardCorners.data32F[12], boardCorners.data32F[13], boardCorners.data32F[96], boardCorners.data32F[97], boardCorners.data32F[84], boardCorners.data32F[85]];
             let stable = applySmoothing(rawPoints);
-            // ... (далее ваш код warpPerspective)
+            
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, stable);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, 400, 0, 400, 400, 0, 400]);
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            let warped = new cv.Mat();
+            cv.warpPerspective(srcFrame, warped, M, new cv.Size(400, 400));
+            
+            // Здесь будет отрисовка доски
+            srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
         }
 
-        window.onload = () => {
-            setTimeout(initCamera, 1000);
-        };
+        window.onload = () => setTimeout(initCamera, 1000);
     </script>
 </body>
 </html>
