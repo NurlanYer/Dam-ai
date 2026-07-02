@@ -17,7 +17,7 @@
         
         .ai-status { background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(0, 255, 102, 0.3); padding: 8px 16px; border-radius: 20px; color: #00ff66; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
         .pulse-dot { width: 8px; height: 8px; background-color: #00ff66; border-radius: 50%; animation: pulse 1.5s infinite; }
-        .pulse-dot.loading { background-color: #ffcc00; animation: pulse 1s infinite; }
+        .pulse-dot.loading { background-color: #ffcc00; animation: pulse 1.5s infinite; }
         .pulse-dot.error { background-color: #ff3333; animation: none; }
         
         .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 12px 24px; border-radius: 24px; font-size: 0.9rem; text-align: center; max-width: 90%; line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); }
@@ -45,7 +45,7 @@
                 <span id="engine-status">CV: Загрузка ИИ-зрения...</span>
             </div>
         </div>
-        <div class="hint" id="txt-hint">Инициализация камеры и модулей автоопределения доски...</div>
+        <div class="hint" id="txt-hint">Инициализация...</div>
     </div>
 
     <script>
@@ -53,19 +53,13 @@
         const ctx = canvas.getContext('2d');
         const video = document.getElementById('webcam');
         
-        let src = null;
-        let dst = null;
-        let cvReady = false;
-        let cameraReady = false;
-
-        let isTracked = false;
-        let oldGray = null;
-        let p0 = null;
-        let p1 = null;
+        let src = null, dst = null, cvReady = false, cameraReady = false;
         const boardWarpSize = 400; 
-
-        // Матрица игры и буфер для сравнения
         let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
+        
+        // Переменные для стабилизации (EMA)
+        let smoothedCorners = null; 
+        const alpha = 0.2; // Коэффициент сглаживания (0.1 - очень плавно, 0.5 - быстро реагирует)
 
         async function initCamera() {
             try {
@@ -77,9 +71,7 @@
                 cameraReady = true;
                 checkReadyToStart();
             } catch (err) {
-                console.error("Ошибка камеры:", err);
-                document.getElementById('status-indicator').className = "pulse-dot error";
-                document.getElementById('engine-status').innerText = "Ошибка камеры";
+                document.getElementById('txt-hint').innerText = "Ошибка камеры.";
             }
         }
 
@@ -87,69 +79,51 @@
 
         function checkReadyToStart() {
             if (cvReady && cameraReady) {
-                const dot = document.getElementById('status-indicator');
-                dot.classList.remove('loading');
-                document.getElementById('engine-status').innerText = "CV: Сканирование активно";
-                
+                document.getElementById('status-indicator').classList.remove('loading');
                 const width = video.videoWidth || 640;
                 const height = video.videoHeight || 480;
-                
                 src = new cv.Mat(height, width, cv.CV_8UC4);
-                dst = new cv.Mat(height, width, cv.CV_8UC1);
-                oldGray = new cv.Mat();
-                p0 = new cv.Mat();
-                p1 = new cv.Mat();
-                
                 requestAnimationFrame(processVideo);
             }
         }
 
-        function filterAndStructureGrid(detectedCorners, outputPoints) {
-            if (detectedCorners.rows < 81) return false;
-            let pointsArray = [];
-            for (let i = 0; i < detectedCorners.rows; i++) {
-                pointsArray.push({ x: detectedCorners.data32F[i * 2], y: detectedCorners.data32F[i * 2 + 1] });
+        // Фильтр EMA для координат
+        function applySmoothing(newCorners) {
+            if (!smoothedCorners) {
+                smoothedCorners = new Float32Array(newCorners);
+                return smoothedCorners;
             }
-            pointsArray.sort((a, b) => a.y - b.y);
-            let rows = [];
-            let currentRow = [pointsArray[0]];
-            for (let i = 1; i < pointsArray.length; i++) {
-                if (Math.abs(pointsArray[i].y - currentRow[0].y) < 15) {
-                    currentRow.push(pointsArray[i]);
-                } else {
-                    rows.push(currentRow);
-                    currentRow = [pointsArray[i]];
-                }
+            for (let i = 0; i < newCorners.length; i++) {
+                smoothedCorners[i] = (alpha * newCorners[i]) + ((1 - alpha) * smoothedCorners[i]);
             }
-            rows.push(currentRow);
-            let validRows = rows.filter(r => r.length >= 9);
-            if (validRows.length < 9) return false;
-            let finalGrid = [];
-            for (let i = 0; i < 9; i++) {
-                validRows[i].sort((a, b) => a.x - b.x);
-                for (let j = 0; j < 9; j++) {
-                    finalGrid.push(validRows[i][j].x, validRows[i][j].y);
-                }
-            }
-            let tmpMat = cv.matFromArray(81, 1, cv.CV_32FC2, finalGrid);
-            tmpMat.copyTo(outputPoints);
-            tmpMat.delete();
-            return true;
+            return smoothedCorners;
         }
 
         function warpPerspectiveBoard(srcFrame, boardCorners) {
             if(!boardCorners.data32F || boardCorners.rows < 81) return;
-            let srcCoords = [boardCorners.data32F[0], boardCorners.data32F[1], boardCorners.data32F[16], boardCorners.data32F[17], boardCorners.data32F[160], boardCorners.data32F[161], boardCorners.data32F[144], boardCorners.data32F[145]];
-            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, srcCoords);
+
+            // Извлекаем 4 точки углов доски
+            let rawPoints = [
+                boardCorners.data32F[0], boardCorners.data32F[1],       // Top-Left
+                boardCorners.data32F[16], boardCorners.data32F[17],     // Top-Right
+                boardCorners.data32F[160], boardCorners.data32F[161],   // Bottom-Right
+                boardCorners.data32F[144], boardCorners.data32F[145]    // Bottom-Left
+            ];
+
+            // Применяем сглаживание
+            let stablePoints = applySmoothing(rawPoints);
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, stablePoints);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, boardWarpSize, 0, boardWarpSize, boardWarpSize, 0, boardWarpSize]);
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
             let warped = new cv.Mat();
             cv.warpPerspective(srcFrame, warped, M, new cv.Size(boardWarpSize, boardWarpSize));
+            
             detectCheckersOnFlatBoard(warped);
+            
             srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
         }
 
-        // Оптимизированная детекция с кэшированием
         function detectCheckersOnFlatBoard(warpedMat) {
             let cellSize = boardWarpSize / 8;
             let nextState = Array(8).fill(null).map(() => Array(8).fill(0));
@@ -161,27 +135,18 @@
                         let rect = new cv.Rect(col * cellSize + 10, row * cellSize + 10, cellSize - 20, cellSize - 20);
                         let cellRoi = warpedMat.roi(rect);
                         let brightness = cv.mean(cellRoi)[0];
-
                         if (brightness < 80) nextState[row][col] = 2;
                         else if (brightness > 150) nextState[row][col] = 1;
-                        else nextState[row][col] = 0;
-
                         if (nextState[row][col] !== boardState[row][col]) isChanged = true;
                         cellRoi.delete();
                     }
                 }
             }
-
-            if (isChanged) {
-                boardState = nextState;
-                calculateAndDrawMoves();
-            }
+            if (isChanged) { boardState = nextState; calculateAndDrawMoves(); }
         }
 
         function calculateAndDrawMoves() {
-            // Логика отрисовки обновляется только при изменении состояния
-            document.getElementById('txt-hint').innerText = "Анализ завершен. Доступные ходы подсвечены.";
-            // Здесь ваша функция отрисовки drawNeonTargetCircle
+            document.getElementById('txt-hint').innerText = "Доска стабилизирована. Анализ активен.";
         }
 
         initCamera();
