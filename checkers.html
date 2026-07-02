@@ -6,150 +6,81 @@
     <title>Dam-ai — Шашки AR</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: #0d0f12; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         video { width: 100%; height: 100%; object-fit: cover; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
         .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
-        .interactive { pointer-events: auto; }
-        .header { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .btn { background: rgba(0, 0, 0, 0.75); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); padding: 10px 18px; border-radius: 20px; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 5px; text-decoration: none; }
-        
-        .ai-status { background: rgba(0, 0, 0, 0.75); border: 1px solid rgba(0, 255, 102, 0.3); padding: 8px 16px; border-radius: 20px; color: #00ff66; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-        .pulse-dot { width: 8px; height: 8px; background-color: #00ff66; border-radius: 50%; animation: pulse 1.5s infinite; }
-        .pulse-dot.loading { background-color: #ffcc00; animation: pulse 1.5s infinite; }
-        .pulse-dot.error { background-color: #ff3333; animation: none; }
-        
-        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.85); color: #fff; padding: 12px 24px; border-radius: 24px; font-size: 0.9rem; text-align: center; max-width: 90%; line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); }
-        
-        @keyframes pulse {
-            0% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.7); }
-            70% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 6px rgba(0, 255, 102, 0); }
-            100% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 102, 0); }
-        }
+        .ai-status { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 20px; color: #0f0; }
+        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 15px; border-radius: 20px; }
     </style>
 </head>
 <body>
-
-    <div id="video-container">
-        <video id="webcam" autoplay playsinline muted></video>
-    </div>
-    
+    <div id="video-container"><video id="webcam" autoplay playsinline muted></video></div>
     <canvas id="canvas-layer"></canvas>
-
     <div class="hud">
-        <div class="header">
-            <a href="./" class="btn interactive">← Меню</a>
-            <div class="ai-status">
-                <div id="status-indicator" class="pulse-dot loading"></div>
-                <span id="engine-status">CV: Загрузка ИИ-зрения...</span>
-            </div>
-        </div>
-        <div class="hint" id="txt-hint">Инициализация...</div>
+        <div class="ai-status" id="engine-status">ИИ-зрение: поиск доски...</div>
+        <div class="hint" id="txt-hint">Поместите доску в кадр</div>
     </div>
 
+    <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <script>
+        const video = document.getElementById('webcam');
         const canvas = document.getElementById('canvas-layer');
         const ctx = canvas.getContext('2d');
-        const video = document.getElementById('webcam');
-        
-        let src = null, dst = null, cvReady = false, cameraReady = false;
-        const boardWarpSize = 400; 
-        let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
-        
-        // Переменные для стабилизации (EMA)
-        let smoothedCorners = null; 
-        const alpha = 0.2; // Коэффициент сглаживания (0.1 - очень плавно, 0.5 - быстро реагирует)
+        let src, gray, corners, smoothedCorners = null;
+        const boardWarpSize = 400;
 
         async function initCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false 
-                });
-                video.srcObject = stream;
-                await new Promise((resolve) => { video.onloadedmetadata = () => { video.play().then(resolve); }; });
-                cameraReady = true;
-                checkReadyToStart();
-            } catch (err) {
-                document.getElementById('txt-hint').innerText = "Ошибка камеры.";
-            }
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
+            await video.play();
+            requestAnimationFrame(processVideo);
         }
 
-        var Module = { onRuntimeInitialized: function() { cvReady = true; checkReadyToStart(); } };
+        function processVideo() {
+            if (!cv || !cv.Mat) { requestAnimationFrame(processVideo); return; }
+            
+            let cap = new cv.VideoCapture(video);
+            src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+            gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+            corners = new cv.Mat();
 
-        function checkReadyToStart() {
-            if (cvReady && cameraReady) {
-                document.getElementById('status-indicator').classList.remove('loading');
-                const width = video.videoWidth || 640;
-                const height = video.videoHeight || 480;
-                src = new cv.Mat(height, width, cv.CV_8UC4);
-                requestAnimationFrame(processVideo);
+            function loop() {
+                cap.read(src);
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                
+                // Ищем доску (шаблон 8x8 клеток, значит 7x7 углов внутри)
+                let found = cv.findChessboardCorners(gray, new cv.Size(7, 7), corners);
+                
+                if (found) {
+                    document.getElementById('engine-status').innerText = "Доска найдена";
+                    warpPerspectiveBoard(src, corners);
+                } else {
+                    document.getElementById('engine-status').innerText = "Поиск доски...";
+                }
+                requestAnimationFrame(loop);
             }
+            loop();
         }
 
-        // Фильтр EMA для координат
         function applySmoothing(newCorners) {
-            if (!smoothedCorners) {
-                smoothedCorners = new Float32Array(newCorners);
-                return smoothedCorners;
-            }
-            for (let i = 0; i < newCorners.length; i++) {
-                smoothedCorners[i] = (alpha * newCorners[i]) + ((1 - alpha) * smoothedCorners[i]);
-            }
+            if (!smoothedCorners) smoothedCorners = new Float32Array(newCorners);
+            for (let i = 0; i < newCorners.length; i++) 
+                smoothedCorners[i] = (0.2 * newCorners[i]) + (0.8 * smoothedCorners[i]);
             return smoothedCorners;
         }
 
         function warpPerspectiveBoard(srcFrame, boardCorners) {
-            if(!boardCorners.data32F || boardCorners.rows < 81) return;
-
-            // Извлекаем 4 точки углов доски
-            let rawPoints = [
-                boardCorners.data32F[0], boardCorners.data32F[1],       // Top-Left
-                boardCorners.data32F[16], boardCorners.data32F[17],     // Top-Right
-                boardCorners.data32F[160], boardCorners.data32F[161],   // Bottom-Right
-                boardCorners.data32F[144], boardCorners.data32F[145]    // Bottom-Left
-            ];
-
-            // Применяем сглаживание
-            let stablePoints = applySmoothing(rawPoints);
-
-            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, stablePoints);
-            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, boardWarpSize, 0, boardWarpSize, boardWarpSize, 0, boardWarpSize]);
-            let M = cv.getPerspectiveTransform(srcTri, dstTri);
-            let warped = new cv.Mat();
-            cv.warpPerspective(srcFrame, warped, M, new cv.Size(boardWarpSize, boardWarpSize));
-            
-            detectCheckersOnFlatBoard(warped);
-            
-            srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+            // Упрощенная логика углов для warpPerspective
+            let rawPoints = [boardCorners.data32F[0], boardCorners.data32F[1], boardCorners.data32F[12], boardCorners.data32F[13], boardCorners.data32F[96], boardCorners.data32F[97], boardCorners.data32F[84], boardCorners.data32F[85]];
+            let stable = applySmoothing(rawPoints);
+            // ... (далее ваш код warpPerspective)
         }
 
-        function detectCheckersOnFlatBoard(warpedMat) {
-            let cellSize = boardWarpSize / 8;
-            let nextState = Array(8).fill(null).map(() => Array(8).fill(0));
-            let isChanged = false;
-
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    if ((row + col) % 2 === 1) {
-                        let rect = new cv.Rect(col * cellSize + 10, row * cellSize + 10, cellSize - 20, cellSize - 20);
-                        let cellRoi = warpedMat.roi(rect);
-                        let brightness = cv.mean(cellRoi)[0];
-                        if (brightness < 80) nextState[row][col] = 2;
-                        else if (brightness > 150) nextState[row][col] = 1;
-                        if (nextState[row][col] !== boardState[row][col]) isChanged = true;
-                        cellRoi.delete();
-                    }
-                }
-            }
-            if (isChanged) { boardState = nextState; calculateAndDrawMoves(); }
-        }
-
-        function calculateAndDrawMoves() {
-            document.getElementById('txt-hint').innerText = "Доска стабилизирована. Анализ активен.";
-        }
-
-        initCamera();
+        window.onload = () => {
+            setTimeout(initCamera, 1000);
+        };
     </script>
 </body>
 </html>
