@@ -17,7 +17,7 @@
 <body>
     <div id="video-container"><video id="webcam" autoplay playsinline muted></video></div>
     <canvas id="canvas-layer"></canvas>
-    <div class="hud"><div class="status" id="engine-status">Загрузка...</div></div>
+    <div class="hud"><div class="status" id="engine-status">Запуск...</div></div>
 
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <script>
@@ -25,45 +25,84 @@
         const canvas = document.getElementById('canvas-layer');
         const ctx = canvas.getContext('2d');
         let src, gray, corners, smoothedCorners = null;
-        let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
 
-        // ... (функции initCamera и processVideo остаются прежними)
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                await video.play();
+                // Ждем пока видео загрузится, чтобы выставить размер canvas
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    requestAnimationFrame(processVideo);
+                };
+            } catch (err) {
+                document.getElementById('engine-status').innerText = "Ошибка камеры!";
+            }
+        }
+
+        function processVideo() {
+            if (!cv || !cv.Mat) { setTimeout(processVideo, 500); return; }
+            
+            src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+            gray = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC1);
+            corners = new cv.Mat();
+            let cap = new cv.VideoCapture(video);
+
+            function loop() {
+                cap.read(src);
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                cv.adaptiveThreshold(gray, gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+                
+                let found = cv.findChessboardCorners(gray, new cv.Size(7, 7), corners);
+                
+                if (found) {
+                    document.getElementById('engine-status').innerText = "AR Режим: Активен";
+                    warpAndAnalyze(src, corners);
+                } else {
+                    document.getElementById('engine-status').innerText = "Поиск доски...";
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+                requestAnimationFrame(loop);
+            }
+            loop();
+        }
+
+        function warpAndAnalyze(srcFrame, boardCorners) {
+            let rawPoints = [boardCorners.data32F[0], boardCorners.data32F[1], boardCorners.data32F[12], boardCorners.data32F[13], boardCorners.data32F[96], boardCorners.data32F[97], boardCorners.data32F[84], boardCorners.data32F[85]];
+            if (!smoothedCorners) smoothedCorners = new Float32Array(rawPoints);
+            for(let i=0; i<8; i++) smoothedCorners[i] = (0.2 * rawPoints[i]) + (0.8 * smoothedCorners[i]);
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, smoothedCorners);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0,0, 400,0, 400,400, 0,400]);
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            let warped = new cv.Mat();
+            cv.warpPerspective(srcFrame, warped, M, new cv.Size(400, 400));
+            
+            analyzeCells(warped);
+            
+            srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+        }
 
         function analyzeCells(warpedMat) {
             let cellSize = 400 / 8;
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Очистка экрана
-
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
-                    // Берем центр ячейки
                     let rect = new cv.Rect(col * cellSize + 10, row * cellSize + 10, cellSize - 20, cellSize - 20);
                     let cell = warpedMat.roi(rect);
                     let brightness = cv.mean(cell)[0];
-
-                    // Логика цвета: шашка темная или светлая
-                    if (brightness < 70) {
-                        boardState[row][col] = 1; // Темная шашка
-                        drawHint(col * cellSize + cellSize/2, row * cellSize + cellSize/2, '#555');
-                    } else if (brightness > 180) {
-                        boardState[row][col] = 2; // Светлая шашка
-                        drawHint(col * cellSize + cellSize/2, row * cellSize + cellSize/2, '#fff');
-                    } else {
-                        boardState[row][col] = 0; // Пусто
+                    if (brightness < 70 || brightness > 180) {
+                        ctx.strokeStyle = '#0f0';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(col * cellSize + 50, row * cellSize + 50, cellSize - 100, cellSize - 100);
                     }
                     cell.delete();
                 }
             }
         }
 
-        function drawHint(x, y, color) {
-            ctx.beginPath();
-            ctx.arc(x, y, 15, 0, 2 * Math.PI);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 5;
-            ctx.stroke();
-        }
-
-        // ... (остальные функции: warpAndAnalyze, loop и т.д.)
+        window.onload = initCamera;
     </script>
 </body>
 </html>
