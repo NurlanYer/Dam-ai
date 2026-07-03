@@ -5,30 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dam-ai — Шашки AR</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         video { width: 100%; height: 100%; object-fit: cover; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-        .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
-        .ai-status { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 20px; color: #0f0; }
-        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 15px; border-radius: 20px; }
+        .hud { position: absolute; top: 20px; left: 20px; right: 20px; z-index: 3; }
+        .status { background: rgba(0,0,0,0.7); padding: 10px; border-radius: 20px; color: #0f0; display: inline-block; font-size: 14px; }
     </style>
 </head>
 <body>
     <div id="video-container"><video id="webcam" autoplay playsinline muted></video></div>
     <canvas id="canvas-layer"></canvas>
     <div class="hud">
-        <div class="ai-status" id="engine-status">ИИ-зрение: поиск...</div>
-        <div class="hint" id="txt-hint">Стабилизация активна</div>
+        <div class="status" id="engine-status">Инициализация...</div>
     </div>
 
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <script>
         const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
         let src, gray, corners, smoothedCorners = null;
         let isTracked = false;
-        let roiRect = null; // Область интереса для быстрого трекинга
+        let boardState = Array(8).fill(null).map(() => Array(8).fill(0));
 
         async function initCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -41,52 +41,51 @@
             if (!cv || !cv.Mat) { requestAnimationFrame(processVideo); return; }
             src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
             gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
-            corners = new cv.Mat();
-
+            
             function loop() {
                 let cap = new cv.VideoCapture(video);
                 cap.read(src);
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                 
-                // Если доска найдена, ищем в ROI, иначе — во всем кадре
-                let searchArea = isTracked ? gray.roi(roiRect) : gray;
-                let found = cv.findChessboardCorners(searchArea, new cv.Size(7, 7), corners);
+                // 1. Адаптивная яркость (Thresholding) для стабильности при разном освещении
+                cv.adaptiveThreshold(gray, gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+                
+                let found = cv.findChessboardCorners(gray, new cv.Size(7, 7), corners);
                 
                 if (found) {
                     isTracked = true;
-                    // Обновляем ROI для следующего кадра (увеличиваем область на 50px)
-                    roiRect = new cv.Rect(0, 0, video.width, video.height); 
-                    document.getElementById('engine-status').innerText = "Стабилизация: ON";
-                    warpPerspectiveBoard(src, corners);
+                    document.getElementById('engine-status').innerText = "AR Режим: Активен";
+                    warpAndAnalyze(src, corners);
                 } else {
                     isTracked = false;
                     document.getElementById('engine-status').innerText = "Поиск доски...";
                 }
-                if (searchArea !== gray) searchArea.delete();
                 requestAnimationFrame(loop);
             }
             loop();
         }
 
-        function applySmoothing(newCorners) {
-            if (!smoothedCorners) smoothedCorners = new Float32Array(newCorners);
-            for (let i = 0; i < newCorners.length; i++) 
-                smoothedCorners[i] = (0.2 * newCorners[i]) + (0.8 * smoothedCorners[i]);
-            return smoothedCorners;
-        }
-
-        function warpPerspectiveBoard(srcFrame, boardCorners) {
+        function warpAndAnalyze(srcFrame, boardCorners) {
+            // Стабилизация (EMA)
             let rawPoints = [boardCorners.data32F[0], boardCorners.data32F[1], boardCorners.data32F[12], boardCorners.data32F[13], boardCorners.data32F[96], boardCorners.data32F[97], boardCorners.data32F[84], boardCorners.data32F[85]];
-            let stable = applySmoothing(rawPoints);
-            
-            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, stable);
-            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, 400, 0, 400, 400, 0, 400]);
+            if (!smoothedCorners) smoothedCorners = new Float32Array(rawPoints);
+            for(let i=0; i<8; i++) smoothedCorners[i] = (0.2 * rawPoints[i]) + (0.8 * smoothedCorners[i]);
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, smoothedCorners);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0,0, 400,0, 400,400, 0,400]);
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
             let warped = new cv.Mat();
             cv.warpPerspective(srcFrame, warped, M, new cv.Size(400, 400));
             
-            // Здесь будет отрисовка доски
+            // 2. Детекция изменений (Cache-based optimization)
+            analyzeCells(warped);
+            
             srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+        }
+
+        function analyzeCells(warpedMat) {
+            // Логика сравнения boardState для экономии ресурсов
+            // Здесь будет код отрисовки подсказок через canvas
         }
 
         window.onload = () => setTimeout(initCamera, 1000);
