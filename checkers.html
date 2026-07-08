@@ -3,94 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dam-ai — Шашки AR с ИИ-советником</title>
+    <title>Dam-ai AR Professional</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
-        .hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
-        .ai-status { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 20px; color: #0f0; }
-        .hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 15px; border-radius: 20px; text-align: center; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; background: #000; overflow: hidden; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        .hud { position: absolute; top: 20px; right: 20px; color: #0f0; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 15px; font-family: monospace; }
     </style>
 </head>
 <body>
-    <div id="video-container"><video id="webcam" autoplay playsinline muted></video>
-    <canvas id="canvas-layer"></canvas></div>
-    <div class="hud">
-        <div class="ai-status" id="engine-status">ИИ-зрение: поиск...</div>
-        <div class="hint" id="txt-hint">Стабилизация активна<br>ИИ рассчитывает ход...</div>
-    </div>
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="canvas-layer"></canvas>
+    <div class="hud" id="status">Инициализация...</div>
 
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('canvas-layer');
-        const ctx = canvas.getContext('2d');
-        let src, gray, corners, smoothedCorners = null;
-        let isTracked = false;
+        const video = document.getElementById('webcam'), canvas = document.getElementById('canvas-layer'), ctx = canvas.getContext('2d');
+        let prevGray, currGray, corners, prevCorners, status = new cv.Mat(), err = new cv.Mat();
+        let isTracking = false;
 
         async function initCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            video.srcObject = stream;
-            await video.play();
-            
-            // Установка размеров канваса под видео
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
+            video.srcObject = stream; await video.play();
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
             processVideo();
         }
 
-        function applySmoothing(newCorners) {
-            if (!smoothedCorners) smoothedCorners = new Float32Array(newCorners);
-            for (let i = 0; i < newCorners.length; i++) 
-                smoothedCorners[i] = (0.2 * newCorners[i]) + (0.8 * smoothedCorners[i]);
-            return smoothedCorners;
-        }
-
-        // Функция AI-советника (отрисовка подсказки)
-        function drawAIDecision(boardCorners) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let x = boardCorners.data32F[0];
-            let y = boardCorners.data32F[1];
-            
-            // Рисуем индикатор хода
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(x, y, 30, 0, 2 * Math.PI);
-            ctx.stroke();
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
-            ctx.fill();
-        }
-
         function processVideo() {
-            if (typeof cv === 'undefined' || !cv.Mat) { setTimeout(processVideo, 500); return; }
-            src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
-            gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+            if (typeof cv === 'undefined') { setTimeout(processVideo, 500); return; }
+            let src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+            prevGray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+            currGray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
             corners = new cv.Mat();
 
             function loop() {
-                let cap = new cv.VideoCapture(video);
-                cap.read(src);
-                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-                
-                let found = cv.findChessboardCorners(gray, new cv.Size(7, 7), corners);
-                
-                if (found) {
-                    isTracked = true;
-                    document.getElementById('engine-status').innerText = "Стабилизация: ON";
-                    drawAIDecision(corners); // Вызов ИИ-советника
+                let cap = new cv.VideoCapture(video); cap.read(src);
+                cv.cvtColor(src, currGray, cv.COLOR_RGBA2GRAY);
+                // Адаптивный порог для борьбы с тенями
+                cv.adaptiveThreshold(currGray, currGray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+
+                if (!isTracking) {
+                    let found = cv.findChessboardCorners(currGray, new cv.Size(7, 7), corners);
+                    if (found) {
+                        isTracking = true;
+                        prevCorners = corners.clone();
+                    }
+                    document.getElementById('status').innerText = "Статус: Поиск...";
                 } else {
-                    isTracked = false;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    document.getElementById('engine-status').innerText = "Поиск доски...";
+                    // Optical Flow трекинг
+                    let nextCorners = new cv.Mat();
+                    cv.calcOpticalFlowPyrLK(prevGray, currGray, prevCorners, nextCorners, status, err);
+                    
+                    // Визуализация трекинга
+                    drawOverlay(nextCorners);
+                    
+                    // Обновление состояния
+                    prevCorners.delete(); prevCorners = nextCorners.clone();
+                    document.getElementById('status').innerText = "Статус: Tracking (Optical Flow)";
                 }
+
+                currGray.copyTo(prevGray);
                 requestAnimationFrame(loop);
             }
             loop();
+        }
+
+        function drawOverlay(pts) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 3;
+            let data = pts.data32F;
+            for(let i=0; i<data.length; i+=2) {
+                ctx.beginPath(); ctx.arc(data[i], data[i+1], 5, 0, 2 * Math.PI); ctx.stroke();
+            }
         }
 
         window.onload = () => setTimeout(initCamera, 1000);
