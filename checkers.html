@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Dam-ai AR Full Debug</title>
+    <title>Dam-ai Final Fix</title>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
@@ -10,7 +10,7 @@
     </style>
 </head>
 <body>
-    <div id="log">Старт...</div>
+    <div id="log">Запуск...</div>
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="canvas-layer"></canvas>
 
@@ -18,58 +18,46 @@
     <script>
         const log = document.getElementById('log');
         const video = document.getElementById('webcam');
-        
-        function updateLog(msg) { log.innerText = msg; console.log(msg); }
+        const canvas = document.getElementById('canvas-layer');
+        const ctx = canvas.getContext('2d');
+        let src, gray;
+
+        function updateLog(msg) { log.innerText = msg; }
 
         async function init() {
-            updateLog("Запрос камеры...");
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
-                updateLog("Камера получена. Ждем метаданные...");
-                
-                // Принудительный старт через 2 секунды, если событие не сработает
-                setTimeout(() => {
-                    if (video.videoWidth === 0) {
-                        updateLog("Видео не загрузилось. Пробую запуск...");
-                        startProcessing();
-                    }
-                }, 2000);
-
                 video.onloadedmetadata = () => {
-                    updateLog("Метаданные получены: " + video.videoWidth + "x" + video.videoHeight);
-                    startProcessing();
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    // Создаем матрицы СТРОГО после получения размеров
+                    src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+                    gray = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC1);
+                    updateLog("Размеры заданы: " + video.videoWidth + "x" + video.videoHeight);
+                    processVideo();
                 };
             } catch (err) {
                 updateLog("Ошибка камеры: " + err.message);
             }
         }
 
-        function startProcessing() {
-            updateLog("Запуск OpenCV...");
-            if (typeof cv === 'undefined') { updateLog("Критическая ошибка: OpenCV не загружен!"); return; }
-            
-            const canvas = document.getElementById('canvas-layer');
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
-            const ctx = canvas.getContext('2d');
-            
-            let src = new cv.Mat(canvas.height, canvas.width, cv.CV_8UC4);
+        function processVideo() {
             let cap = new cv.VideoCapture(video);
-
             function loop() {
                 try {
                     cap.read(src);
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     
-                    // Рисуем рамку, чтобы видеть, что цикл идет
-                    ctx.strokeStyle = 'red';
+                    // Рисуем индикатор работы
+                    ctx.strokeStyle = '#0f0';
                     ctx.lineWidth = 5;
-                    ctx.strokeRect(50, 50, 100, 100);
+                    ctx.strokeRect(20, 20, 100, 100);
                     
                     requestAnimationFrame(loop);
                 } catch (e) {
-                    updateLog("Ошибка цикла: " + e.message);
+                    updateLog("Loop error: " + e.message);
                 }
             }
             loop();
