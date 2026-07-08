@@ -1,27 +1,50 @@
 <!DOCTYPE html>
-<html>
-<body style="background:black; color:white; font-family:sans-serif;">
-    <div id="log" style="padding:20px; font-size: 20px;">Запуск теста...</div>
-    <video id="v" autoplay playsinline style="width:100%;"></video>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Dam-ai Debugger</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #error-log { 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+            background: rgba(255, 0, 0, 0.8); color: #fff; padding: 15px; 
+            border-radius: 10px; font-family: monospace; z-index: 100; 
+            max-width: 80%; text-align: center; display: none;
+        }
+    </style>
+</head>
+<body>
+    <video id="webcam" autoplay playsinline muted></video>
+    <div id="error-log"></div>
 
     <script>
-        const log = document.getElementById('log');
-        const v = document.getElementById('v');
+        const errorLog = document.getElementById('error-log');
+        
+        function showError(msg) {
+            errorLog.innerText = "ОШИБКА: " + msg;
+            errorLog.style.display = 'block';
+            console.error(msg);
+        }
 
-        async function test() {
+        async function init() {
             try {
-                log.innerText = "Запрос камеры...";
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                v.srcObject = stream;
-                log.innerText = "Камера получена! Успех.";
-                log.style.color = "#0f0";
-            } catch (e) {
-                log.innerText = "Ошибка: " + e.message;
-                log.style.color = "red";
-                console.error(e);
+                // 1. Проверка поддержки медиа-устройств
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("Ваш браузер не поддерживает доступ к камере.");
+                }
+
+                // 2. Запрос камеры
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                document.getElementById('webcam').srcObject = stream;
+                
+            } catch (err) {
+                showError(err.name + ": " + err.message);
             }
         }
-        test();
+
+        // Автозапуск
+        window.onload = init;
     </script>
 </body>
 </html>
