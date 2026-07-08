@@ -2,93 +2,75 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Dam-ai AR Fixed Loop</title>
+    <title>Dam-ai AR Full Debug</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
+        body { margin: 0; background: #000; color: #fff; font-family: monospace; overflow: hidden; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-        #status { position: absolute; top: 10px; left: 10px; color: #0f0; background: rgba(0,0,0,0.7); padding: 10px; z-index: 20; }
-        #error-log { 
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
-            background: rgba(255, 0, 0, 0.9); color: #fff; padding: 15px; border-radius: 10px; 
-            z-index: 100; text-align: center; display: none; width: 90%;
-        }
+        #log { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; z-index: 50; border: 1px solid #0f0; }
     </style>
 </head>
 <body>
+    <div id="log">Старт...</div>
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="canvas-layer"></canvas>
-    <div id="status">Запуск...</div>
-    <div id="error-log"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.min.js"></script>
     <script>
-        const video = document.getElementById('webcam'), 
-              canvas = document.getElementById('canvas-layer'), 
-              ctx = canvas.getContext('2d'),
-              errorLog = document.getElementById('error-log'),
-              status = document.getElementById('status');
-
-        function logError(msg) {
-            errorLog.innerText = "DEBUG ERROR: " + msg;
-            errorLog.style.display = 'block';
-        }
+        const log = document.getElementById('log');
+        const video = document.getElementById('webcam');
+        
+        function updateLog(msg) { log.innerText = msg; console.log(msg); }
 
         async function init() {
+            updateLog("Запрос камеры...");
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
-                video.play();
-                status.innerText = "Камера готова. Ожидание видео...";
-                processVideo();
+                updateLog("Камера получена. Ждем метаданные...");
+                
+                // Принудительный старт через 2 секунды, если событие не сработает
+                setTimeout(() => {
+                    if (video.videoWidth === 0) {
+                        updateLog("Видео не загрузилось. Пробую запуск...");
+                        startProcessing();
+                    }
+                }, 2000);
+
+                video.onloadedmetadata = () => {
+                    updateLog("Метаданные получены: " + video.videoWidth + "x" + video.videoHeight);
+                    startProcessing();
+                };
             } catch (err) {
-                logError(err.message);
+                updateLog("Ошибка камеры: " + err.message);
             }
         }
 
-        function processVideo() {
-            let src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
-            let gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
-            let binary = new cv.Mat();
-            let contours = new cv.MatVector();
+        function startProcessing() {
+            updateLog("Запуск OpenCV...");
+            if (typeof cv === 'undefined') { updateLog("Критическая ошибка: OpenCV не загружен!"); return; }
+            
+            const canvas = document.getElementById('canvas-layer');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            
+            let src = new cv.Mat(canvas.height, canvas.width, cv.CV_8UC4);
             let cap = new cv.VideoCapture(video);
 
             function loop() {
-                // ПРОВЕРКА: Если видео не готово, пропускаем кадр
-                if (video.videoWidth === 0 || video.readyState !== 4) {
-                    requestAnimationFrame(loop);
-                    return;
-                }
-
                 try {
                     cap.read(src);
-                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-                    cv.findContours(binary, contours, new cv.Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                    let maxArea = 0, bestContour = null;
-                    for (let i = 0; i < contours.size(); ++i) {
-                        let cnt = contours.get(i);
-                        let area = cv.contourArea(cnt);
-                        if (area > 5000 && area > maxArea) {
-                            maxArea = area;
-                            bestContour = cnt;
-                        }
-                    }
-
-                    if (bestContour) {
-                        status.innerText = "Статус: Доска найдена";
-                        let rect = cv.boundingRect(bestContour);
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.strokeStyle = '#00FF00'; ctx.lineWidth = 5;
-                        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-                    } else {
-                        status.innerText = "Статус: Поиск доски...";
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    }
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    // Рисуем рамку, чтобы видеть, что цикл идет
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 5;
+                    ctx.strokeRect(50, 50, 100, 100);
+                    
+                    requestAnimationFrame(loop);
                 } catch (e) {
-                    // Ошибки здесь больше не должны блокировать цикл
+                    updateLog("Ошибка цикла: " + e.message);
                 }
-                requestAnimationFrame(loop);
             }
             loop();
         }
