@@ -2,29 +2,51 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Dam-ai Universal AR</title>
+    <title>Dam-ai AR Debugger</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-        #status { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.5); padding: 10px; z-index: 10; }
+        #status { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 10px; z-index: 20; }
+        #error-log { 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+            background: rgba(255, 0, 0, 0.9); color: #fff; padding: 15px; border-radius: 10px; 
+            z-index: 100; text-align: center; display: none; width: 90%;
+        }
     </style>
 </head>
 <body>
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="canvas-layer"></canvas>
-    <div id="status">Инициализация...</div>
+    <div id="status">Инициализация системы...</div>
+    <div id="error-log"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.min.js"></script>
     <script>
-        const video = document.getElementById('webcam'), canvas = document.getElementById('canvas-layer'), ctx = canvas.getContext('2d');
-        
+        const video = document.getElementById('webcam'), 
+              canvas = document.getElementById('canvas-layer'), 
+              ctx = canvas.getContext('2d'),
+              errorLog = document.getElementById('error-log'),
+              status = document.getElementById('status');
+
+        function logError(msg) {
+            errorLog.innerText = "DEBUG ERROR: " + msg;
+            errorLog.style.display = 'block';
+            console.error(msg);
+        }
+
         async function init() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                processVideo();
-            };
+            try {
+                if (typeof cv === 'undefined') throw new Error("OpenCV не найден!");
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth; 
+                    canvas.height = video.videoHeight;
+                    processVideo();
+                };
+            } catch (err) {
+                logError(err.name + ": " + err.message);
+            }
         }
 
         function processVideo() {
@@ -35,31 +57,32 @@
             let hierarchy = new cv.Mat();
 
             function loop() {
-                let cap = new cv.VideoCapture(video); cap.read(src);
-                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-                
-                // Адаптивный порог - лучше всего работает при засветах и тенях
-                cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                try {
+                    let cap = new cv.VideoCapture(video); cap.read(src);
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
-                // Поиск контуров доски
-                cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                let maxArea = 0, bestContour = null;
-                for (let i = 0; i < contours.size(); ++i) {
-                    let cnt = contours.get(i);
-                    let area = cv.contourArea(cnt);
-                    if (area > 5000 && area > maxArea) {
-                        maxArea = area;
-                        bestContour = cnt;
+                    let maxArea = 0, bestContour = null;
+                    for (let i = 0; i < contours.size(); ++i) {
+                        let cnt = contours.get(i);
+                        let area = cv.contourArea(cnt);
+                        if (area > 5000 && area > maxArea) {
+                            maxArea = area;
+                            bestContour = cnt;
+                        }
                     }
-                }
 
-                if (bestContour) {
-                    document.getElementById('status').innerText = "Доска обнаружена (Контурный метод)";
-                    drawBoard(bestContour);
-                } else {
-                    document.getElementById('status').innerText = "Ищем доску...";
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    if (bestContour) {
+                        status.innerText = "Статус: Доска найдена";
+                        drawBoard(bestContour);
+                    } else {
+                        status.innerText = "Статус: Поиск доски...";
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                } catch (e) {
+                    logError("Loop error: " + e.message);
                 }
                 requestAnimationFrame(loop);
             }
