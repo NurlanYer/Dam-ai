@@ -1,46 +1,27 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Dam-ai Diagnostics</title>
-    <style>
-        body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        #overlay { position: absolute; top: 10px; right: 10px; background: #222; padding: 20px; border: 1px solid #0f0; }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-    </style>
-</head>
-<body>
-    <div id="overlay">Статус: <span id="status">Инициализация...</span></div>
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="canvas-layer"></canvas>
+<html>
+<body style="background:black; color:white; font-family:sans-serif;">
+    <div id="log" style="padding:20px; font-size: 20px;">Запуск теста...</div>
+    <video id="v" autoplay playsinline style="width:100%;"></video>
 
-    <script src="https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.min.js" onload="onOpenCvReady();" onerror="onOpenCvError();"></script>
-    
     <script>
-        const status = document.getElementById('status');
-        
-        function onOpenCvError() {
-            status.innerText = "Ошибка загрузки библиотеки!";
-            console.error("OpenCV не загрузился!");
-        }
+        const log = document.getElementById('log');
+        const v = document.getElementById('v');
 
-        function onOpenCvReady() {
-            status.innerText = "OpenCV загружен. Запрос камеры...";
-            console.log("OpenCV version:", cv.version);
-            initCamera();
-        }
-
-        async function initCamera() {
+        async function test() {
             try {
+                log.innerText = "Запрос камеры...";
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                const video = document.getElementById('webcam');
-                video.srcObject = stream;
-                status.innerText = "Камера активна.";
-                // Если дошли сюда, значит все работает
-            } catch (err) {
-                status.innerText = "Камера недоступна: " + err.name;
+                v.srcObject = stream;
+                log.innerText = "Камера получена! Успех.";
+                log.style.color = "#0f0";
+            } catch (e) {
+                log.innerText = "Ошибка: " + e.message;
+                log.style.color = "red";
+                console.error(e);
             }
         }
+        test();
     </script>
 </body>
 </html>
