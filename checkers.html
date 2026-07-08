@@ -2,11 +2,11 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Dam-ai AR Debugger</title>
+    <title>Dam-ai AR Fixed Loop</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-        #status { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 10px; z-index: 20; }
+        #status { position: absolute; top: 10px; left: 10px; color: #0f0; background: rgba(0,0,0,0.7); padding: 10px; z-index: 20; }
         #error-log { 
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
             background: rgba(255, 0, 0, 0.9); color: #fff; padding: 15px; border-radius: 10px; 
@@ -17,7 +17,7 @@
 <body>
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="canvas-layer"></canvas>
-    <div id="status">Инициализация системы...</div>
+    <div id="status">Запуск...</div>
     <div id="error-log"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.min.js"></script>
@@ -31,21 +31,17 @@
         function logError(msg) {
             errorLog.innerText = "DEBUG ERROR: " + msg;
             errorLog.style.display = 'block';
-            console.error(msg);
         }
 
         async function init() {
             try {
-                if (typeof cv === 'undefined') throw new Error("OpenCV не найден!");
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth; 
-                    canvas.height = video.videoHeight;
-                    processVideo();
-                };
+                video.play();
+                status.innerText = "Камера готова. Ожидание видео...";
+                processVideo();
             } catch (err) {
-                logError(err.name + ": " + err.message);
+                logError(err.message);
             }
         }
 
@@ -54,15 +50,20 @@
             let gray = new cv.Mat(video.height, video.width, cv.CV_8UC1);
             let binary = new cv.Mat();
             let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
+            let cap = new cv.VideoCapture(video);
 
             function loop() {
+                // ПРОВЕРКА: Если видео не готово, пропускаем кадр
+                if (video.videoWidth === 0 || video.readyState !== 4) {
+                    requestAnimationFrame(loop);
+                    return;
+                }
+
                 try {
-                    let cap = new cv.VideoCapture(video); cap.read(src);
+                    cap.read(src);
                     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                     cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-
-                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                    cv.findContours(binary, contours, new cv.Mat(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
                     let maxArea = 0, bestContour = null;
                     for (let i = 0; i < contours.size(); ++i) {
@@ -76,25 +77,20 @@
 
                     if (bestContour) {
                         status.innerText = "Статус: Доска найдена";
-                        drawBoard(bestContour);
+                        let rect = cv.boundingRect(bestContour);
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.strokeStyle = '#00FF00'; ctx.lineWidth = 5;
+                        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
                     } else {
                         status.innerText = "Статус: Поиск доски...";
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                     }
                 } catch (e) {
-                    logError("Loop error: " + e.message);
+                    // Ошибки здесь больше не должны блокировать цикл
                 }
                 requestAnimationFrame(loop);
             }
             loop();
-        }
-
-        function drawBoard(cnt) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let rect = cv.boundingRect(cnt);
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 5;
-            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
         }
 
         window.onload = init;
